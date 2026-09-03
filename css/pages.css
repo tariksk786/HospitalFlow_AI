@@ -1,0 +1,923 @@
+/* ============================================
+   HospitalFlow AI — Page Specific Styles
+   MedFlow Vista Visual Standard
+   ============================================ */
+
+/* ============================================
+   1. AUTH SPLIT LANDING (50/50 DESKTOP, STACKED MOBILE)
+   ============================================ */
+.auth-split-layout {
+  display: flex;
+  min-height: 100vh;
+  width: 100vw;
+  background: var(--bg-surface);
+}
+
+/* Left Brand Panel */
+.auth-brand-panel {
+  flex: 1;
+  background: linear-gradient(145deg, #1D63ED 0%, #0284C7 60%, #0369A1 100%);
+  color: white;
+  padding: var(--space-12) var(--space-10);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Circular radar vector lines overlay */
+.auth-brand-radar-bg {
+  position: absolute;
+  top: 50%;
+  left: 60%;
+  transform: translate(-50%, -50%);
+  width: 540px;
+  height: 540px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+.auth-brand-radar-bg::before {
+  content: '';
+  position: absolute;
+  top: 15%;
+  left: 15%;
+  width: 70%;
+  height: 70%;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.auth-brand-radar-bg::after {
+  content: '';
+  position: absolute;
+  top: 30%;
+  left: 30%;
+  width: 40%;
+  height: 40%;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.auth-brand-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  z-index: 2;
+}
+
+.auth-logo-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: white;
+}
+
+.auth-brand-name {
+  font-size: var(--font-size-xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.auth-brand-center {
+  max-width: 520px;
+  z-index: 2;
+  margin: var(--space-8) 0;
+}
+
+.auth-hero-tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+  margin-bottom: var(--space-3);
+}
+
+.auth-hero-title {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.22;
+  margin-bottom: var(--space-4);
+  letter-spacing: -0.03em;
+  color: white;
+}
+
+.auth-hero-desc {
+  font-size: var(--font-size-md);
+  line-height: 1.6;
+  opacity: 0.9;
+  margin-bottom: var(--space-6);
+}
+
+.auth-feature-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.auth-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(6px);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: white;
+}
+
+.auth-brand-footer {
+  font-size: 11px;
+  opacity: 0.75;
+  z-index: 2;
+}
+
+/* Right Portals Selection Panel */
+.auth-portals-panel {
+  flex: 1;
+  background: var(--bg-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8);
+}
+
+.auth-portals-container {
+  width: 100%;
+  max-width: 460px;
+}
+
+.auth-portals-header h2 {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  letter-spacing: -0.02em;
+}
+
+.auth-portals-header p {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-6);
+}
+
+.auth-portal-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.auth-portal-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4) var(--space-5);
+  box-shadow: var(--shadow-card);
+  transition: all var(--transition-base);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.auth-portal-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-hover);
+  border-color: var(--primary-border);
+}
+
+.portal-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.portal-card-icon.patient { background: var(--primary-50); color: var(--primary); }
+.portal-card-icon.doctor { background: #F0FDF4; color: #16A34A; }
+.portal-card-icon.admin { background: #F1F5F9; color: #0284C7; }
+
+.portal-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.portal-card-title {
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.portal-card-desc {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.portal-card-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.auth-notice-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.auth-notice-card i {
+  color: var(--primary);
+  margin-top: 2px;
+}
+
+/* Dedicated Single Panel Logins (Patient, Doctor, Admin) */
+.auth-single-panel-layout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-6);
+  background: var(--bg-main);
+}
+
+.auth-login-box {
+  width: 100%;
+  max-width: 440px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2xl);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-card);
+}
+
+.auth-box-header h2 {
+  font-size: var(--font-size-2xl);
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.auth-box-header p {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.auth-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin-bottom: var(--space-3);
+}
+.auth-back-link:hover {
+  color: var(--primary);
+}
+
+/* ============================================
+   2. PATIENT PORTAL HOME CARDS (MEDFLOW VISTA)
+   ============================================ */
+.patient-greeting-header {
+  margin-bottom: var(--space-6);
+}
+.patient-greeting-header h1 {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+.patient-greeting-header p {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+/* Calm Emergency Assistance Card */
+.emergency-calm-card {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: var(--radius-xl);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-6);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.emergency-calm-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.emergency-calm-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--critical);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.emergency-calm-title {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: #991B1B;
+  margin: 0;
+}
+
+.emergency-calm-desc {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin: 2px 0 0;
+}
+
+/* Next Appointment Card (MedFlow Vista Standard) */
+.patient-apt-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-card);
+}
+
+.apt-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.apt-card-tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.apt-dept-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.apt-doctor-name {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.apt-time-inner-box {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin: var(--space-4) 0;
+}
+
+.apt-time-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 6px;
+}
+
+.apt-time-large {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1;
+}
+
+.apt-date-text {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.apt-window-text {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.apt-meta-footer {
+  border-top: 1px solid var(--border-light);
+  padding-top: var(--space-3);
+  margin-top: var(--space-4);
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+/* Live Queue Card */
+.patient-queue-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-card);
+}
+
+.queue-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  align-items: baseline;
+}
+
+.queue-metric-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.queue-metric-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.queue-token-value {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1;
+}
+
+.queue-metric-val {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+/* Next Medication Card */
+.patient-med-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-card);
+}
+
+.med-schedule-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin: var(--space-3) 0 var(--space-4);
+}
+
+.med-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--teal-light);
+  color: var(--teal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+/* ============================================
+   3. DOCTOR PORTAL WORKSPACE
+   ============================================ */
+.doctor-current-patient-card {
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-card);
+}
+
+.doctor-emergency-active-card {
+  background: #FEF2F2;
+  border: 2px solid var(--critical-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  margin-bottom: var(--space-5);
+}
+
+/* ============================================
+   4. FLOW INTELLIGENCE & RECOVERY
+   ============================================ */
+.dept-flow-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-card);
+  transition: all var(--transition-base);
+}
+.dept-flow-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-hover);
+}
+
+.dept-flow-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.dept-flow-metrics {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-top: var(--space-2);
+}
+
+/* Emergency Impact Card */
+.emergency-impact-card {
+  background: linear-gradient(135deg, #FFFBEB 0%, #FEF2F2 100%);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+/* Ambulance Fleet Timeline */
+.amb-timeline-track {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  margin: var(--space-4) 0;
+}
+
+/* ============================================
+   5. RESPONSIVE BREAKPOINTS (ADDENDUM #2)
+   ============================================ */
+@media (max-width: 1024px) {
+  .auth-split-layout {
+    flex-direction: column;
+  }
+  .auth-brand-panel {
+    padding: var(--space-8) var(--space-6);
+  }
+  .auth-hero-title {
+    font-size: 26px;
+  }
+}
+
+@media (max-width: 768px) {
+  .auth-split-layout {
+    flex-direction: column;
+  }
+  .auth-brand-panel {
+    padding: var(--space-6) var(--space-4);
+  }
+  .auth-brand-center {
+    margin: var(--space-4) 0;
+  }
+  .auth-hero-title {
+    font-size: 22px;
+  }
+  .auth-portals-panel {
+    padding: var(--space-6) var(--space-4);
+  }
+  .queue-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-3);
+  }
+}
+
+/* ============================================
+   6. DEMO SIMULATION & STORY MODE STYLES
+   ============================================ */
+.demo-simulation-layout {
+  padding: var(--space-6);
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.demo-sim-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.demo-brand-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 800;
+  font-size: var(--font-size-md);
+  color: var(--text-primary);
+}
+
+.demo-stepper-container {
+  background: white;
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-5);
+  overflow-x: auto;
+}
+
+.demo-stepper-track {
+  display: flex;
+  align-items: center;
+  min-width: 1100px;
+  justify-content: space-between;
+  position: relative;
+}
+
+.demo-step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  transition: all var(--transition-base);
+  opacity: 0.55;
+  width: 70px;
+  text-align: center;
+}
+
+.demo-step-item.active {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.demo-step-item.completed {
+  opacity: 0.85;
+}
+
+.demo-step-bubble {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--bg-subtle);
+  border: 2px solid var(--border);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all var(--transition-base);
+}
+
+.demo-step-item.active .demo-step-bubble {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+  box-shadow: 0 0 0 4px var(--primary-100);
+}
+
+.demo-step-item.completed .demo-step-bubble {
+  background: var(--success);
+  border-color: var(--success);
+  color: white;
+}
+
+.demo-step-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 68px;
+}
+
+.demo-step-item.active .demo-step-label {
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.demo-stage-screen {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .demo-stage-screen {
+    grid-template-columns: 1fr;
+  }
+}
+
+.demo-stage-card {
+  background: white;
+  border-radius: var(--radius-2xl);
+  border: 1px solid var(--border);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-card);
+  min-height: 480px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.demo-presenter-panel {
+  background: linear-gradient(145deg, #1E293B 0%, #0F172A 100%);
+  color: white;
+  border-radius: var(--radius-2xl);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-lg);
+}
+
+.presenter-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(234, 179, 8, 0.2);
+  color: #FACC15;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  margin-bottom: var(--space-3);
+}
+
+.presenter-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-md);
+  font-weight: 800;
+  color: #F8FAFC;
+}
+
+.presenter-desc {
+  font-size: var(--font-size-xs);
+  color: #94A3B8;
+  line-height: 1.5;
+  margin-bottom: var(--space-4);
+}
+
+.presenter-box {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  font-size: 11px;
+  color: #CBD5E1;
+  line-height: 1.4;
+}
+
+.presenter-box strong {
+  color: #38BDF8;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.stage-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--primary-50);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  margin-bottom: var(--space-3);
+}
+
+.stage-title {
+  margin: 0 0 var(--space-6);
+  font-size: var(--font-size-xl);
+  font-weight: 800;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.stage-visual-box {
+  margin-top: var(--space-4);
+}
+
+/* Universal Why Drawer Styles */
+.why-factor-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4);
+}
+
+.why-step-badge {
+  display: inline-block;
+  background: var(--primary-100);
+  color: var(--primary-dark);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 2px;
+}
+
+/* Scenario Preset Card */
+.scenario-preset-card {
+  transition: all var(--transition-base);
+}
+.scenario-preset-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary) !important;
+  box-shadow: var(--shadow-md);
+}
+.scenario-preset-card.active {
+  border-color: var(--primary) !important;
+  background: #EFF6FF;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Timeline Components */
+.timeline-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  position: relative;
+  padding-left: var(--space-6);
+  border-left: 2px solid var(--border-light);
+}
+
+.timeline-item {
+  position: relative;
+}
+
+.timeline-badge {
+  position: absolute;
+  left: -33px;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: var(--primary-50);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  border: 2px solid white;
+  box-shadow: var(--shadow-sm);
+}
+
+.timeline-content {
+  background: var(--bg-subtle);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+}
+

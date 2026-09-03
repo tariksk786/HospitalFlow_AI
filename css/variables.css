@@ -1,0 +1,152 @@
+/* ============================================
+   HospitalFlow AI — Design System & Tokens
+   MedFlow Vista Visual Standard
+   ============================================ */
+
+:root {
+  /* ---- Primary Healthcare Blue ---- */
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+  --primary-dark: #1E40AF;
+  --primary-light: #EFF6FF;
+  --primary-border: #BFDBFE;
+  --primary-50: #EFF6FF;
+  --primary-100: #DBEAFE;
+  --primary-200: #BFDBFE;
+  --primary-300: #93C5FD;
+  --primary-600: #2563EB;
+  --primary-700: #1D4ED8;
+
+  /* ---- Secondary Intelligence Teal ---- */
+  --teal: #0891B2;
+  --teal-light: #ECFEFF;
+  --teal-border: #A5F3FC;
+  --teal-dark: #0E7490;
+
+  /* ---- Semantic Visual States ---- */
+  /* 1. Normal (Calm White + Blue) */
+  --state-normal-bg: #EFF6FF;
+  --state-normal-text: #1D4ED8;
+  --state-normal-border: #BFDBFE;
+
+  /* 2. Success (Confirmed / Completed / Healthy) */
+  --success: #16A34A;
+  --success-light: #F0FDF4;
+  --success-border: #BBF7D0;
+  --success-dark: #15803D;
+
+  /* 3. Attention (Waiting / Moderate / Alert) */
+  --warning: #D97706;
+  --warning-light: #FFFBEB;
+  --warning-border: #FDE68A;
+  --warning-dark: #B45309;
+
+  /* 4. Critical / Emergency (Emergency Cases Only) */
+  --critical: #DC2626;
+  --critical-light: #FEF2F2;
+  --critical-border: #FECACA;
+  --critical-dark: #B91C1C;
+
+  /* 5. Recovering (Queue & Capacity Returning to Normal) */
+  --recovering: #059669;
+  --recovering-light: #ECFDF5;
+  --recovering-border: #A7F3D0;
+
+  /* ---- Neutrals & Surfaces ---- */
+  --bg-main: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-surface-hover: #F8FAFC;
+  --bg-muted: #F1F5F9;
+  --bg-subtle: #F8FAFC;
+
+  --text-primary: #0F172A;
+  --text-secondary: #64748B;
+  --text-tertiary: #94A3B8;
+  --text-inverse: #FFFFFF;
+
+  --border: #E2E8F0;
+  --border-strong: #CBD5E1;
+  --border-light: #F1F5F9;
+  --border-focus: var(--primary);
+  --divider: #E2E8F0;
+
+  /* ---- Overlay ---- */
+  --overlay: rgba(15, 23, 42, 0.4);
+  --overlay-light: rgba(15, 23, 42, 0.04);
+
+  /* ---- Typography ---- */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-size-xs: 0.75rem;     /* 12px */
+  --font-size-sm: 0.8125rem;   /* 13px */
+  --font-size-base: 0.875rem;  /* 14px */
+  --font-size-md: 0.9375rem;   /* 15px */
+  --font-size-body: 1rem;      /* 16px (Patient body preferred) */
+  --font-size-lg: 1.125rem;    /* 18px */
+  --font-size-xl: 1.25rem;     /* 20px */
+  --font-size-2xl: 1.5rem;     /* 24px */
+  --font-size-3xl: 1.75rem;    /* 28px */
+  --font-size-4xl: 2rem;       /* 32px */
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.6;
+
+  /* ---- Spacing (4px / 8px scale) ---- */
+  --space-1: 0.25rem;  /* 4px  */
+  --space-2: 0.5rem;   /* 8px  */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-5: 1.25rem;  /* 20px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+  --space-10: 2.5rem;  /* 40px */
+  --space-12: 3rem;    /* 48px */
+  --space-16: 4rem;    /* 64px */
+
+  /* ---- Standardized Border Radius ---- */
+  --radius-xs: 0.25rem;   /* 4px  */
+  --radius-sm: 0.375rem;  /* 6px  (Badges, chips, tags) */
+  --radius-md: 0.5625rem; /* 9px  (Buttons, nav items, inputs) */
+  --radius-lg: 0.75rem;   /* 12px (Inner containers) */
+  --radius-xl: 0.875rem;  /* 14px (Standard Cards) */
+  --radius-2xl: 1rem;     /* 16px (Large Feature Cards) */
+  --radius-full: 9999px;  /* Pills, Avatars */
+
+  /* ---- Ambient Subtle Shadows ---- */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.03);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+  --shadow-hover: 0 4px 14px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -2px rgba(15, 23, 42, 0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.06), 0 4px 6px -4px rgba(15, 23, 42, 0.03);
+  --shadow-modal: 0 20px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+
+  /* ---- Micro-Transitions ---- */
+  --transition-fast: 120ms ease;
+  --transition-base: 180ms ease;
+  --transition-slow: 250ms ease;
+
+  /* ---- Layout Dimensions ---- */
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 72px;
+  --header-height: 64px;
+  --btn-height: 44px;
+  --btn-height-sm: 36px;
+  --btn-height-lg: 48px;
+  --max-content-width: 1280px;
+  --card-padding: 24px;
+  --card-padding-sm: 16px;
+
+  /* ---- Z-Indices ---- */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal-backdrop: 300;
+  --z-modal: 400;
+  --z-notification: 500;
+  --z-tooltip: 600;
+}

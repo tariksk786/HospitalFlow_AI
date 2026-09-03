@@ -1,0 +1,21 @@
+{
+  "name": "hospitalflow-ai",
+  "version": "1.0.0",
+  "description": "HospitalFlow AI — Intelligent Hospital Flow, Emergency Readiness & Care Continuity",
+  "main": "index.html",
+  "type": "module",
+  "scripts": {
+    "dev": "npx serve -l 8080 .",
+    "start": "npx serve -l 8080 .",
+    "serve": "npx serve -l 8080 ."
+  },
+  "keywords": [
+    "healthcare",
+    "hospital-operations",
+    "emergency-readiness",
+    "flow-intelligence",
+    "care-continuity"
+  ],
+  "author": "HospitalFlow AI Team",
+  "license": "MIT"
+}
