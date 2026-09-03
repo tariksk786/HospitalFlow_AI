@@ -14,6 +14,24 @@ let queueCounter = 100;
 
 const FlowEngine = {
   /**
+   * Get available slots for a doctor on a given date
+   */
+  getAvailableSlots(doctorId, dateStr) {
+    const slots = [];
+    const baseDate = dateStr ? new Date(dateStr) : new Date();
+    const startHour = 9;
+    const endHour = 17;
+    for (let h = startHour; h < endHour; h++) {
+      for (let m = 0; m < 60; m += 30) {
+        const d = new Date(baseDate);
+        d.setHours(h, m, 0, 0);
+        slots.push(d.toISOString());
+      }
+    }
+    return slots;
+  },
+
+  /**
    * Book a new appointment
    */
   bookAppointment({ patientId, doctorId, department, scheduledTime, priority = 'normal' }) {
@@ -33,7 +51,10 @@ const FlowEngine = {
       new Date(a.scheduledTime).toDateString() === new Date(scheduledTime).toDateString()
     );
     if (duplicate) {
-      throw new Error(`Patient already has a scheduled appointment (${duplicate.id}) with this doctor today`);
+      // Update existing scheduled appointment with new time slot
+      appState.updateItem('appointments', duplicate.id, { scheduledTime, department });
+      const window = PredictionEngine.calculateConsultationWindow({ department, doctorId, scheduledTime });
+      return { appointment: duplicate, prediction: window, noShowRisk: { level: 'Low' } };
     }
 
     appointmentCounter++;

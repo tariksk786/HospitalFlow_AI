@@ -121,7 +121,12 @@ class AppState {
     eventBus.emit(EventTypes.STATE_UPDATED, { key });
   }
 
-  // ---- Collection helpers (Single Operational Record) ----
+  /** Find an item in a collection by ID */
+  findById(collectionKey, id) {
+    const collection = this.state[collectionKey];
+    if (!Array.isArray(collection)) return null;
+    return collection.find(item => item.id === id || item.userId === id || item.requestId === id || item.caseId === id) || null;
+  }
 
   /** Add an item to a collection */
   addItem(collectionKey, item) {

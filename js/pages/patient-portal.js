@@ -593,26 +593,75 @@ function renderPatientAppointments(el, patient) {
 
   el.querySelector('#symptom-booking-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
-    const dept = deptSelect.value;
-    const docId = docSelect.value;
-    const date = el.querySelector('#apt-date').value;
-    const timeVal = timeSelect.value;
-    const scheduledTime = timeVal || new Date(date + 'T10:30:00').toISOString();
+    try {
+      const dept = deptSelect.value;
+      const docId = docSelect.value;
+      const date = el.querySelector('#apt-date').value || new Date().toISOString().split('T')[0];
+      const timeVal = timeSelect.value;
+      
+      let scheduledTime;
+      if (timeVal) {
+        scheduledTime = timeVal;
+      } else {
+        const d = new Date(date);
+        d.setHours(10, 30, 0, 0);
+        scheduledTime = d.toISOString();
+      }
 
-    const result = FlowEngine.bookAppointment({
-      patientId: patient.id,
-      doctorId: docId,
-      department: dept,
-      scheduledTime
-    });
+      if (!docId) {
+        alert('Please select a doctor.');
+        return;
+      }
 
-    appState.updateItem('appointments', result.appointment.id, {
-      symptom_original_text: symptomInput.value.trim(),
-      normalized_symptoms: selectedSymptomCodes
-    });
+      const result = FlowEngine.bookAppointment({
+        patientId: patient.id,
+        doctorId: docId,
+        department: dept,
+        scheduledTime
+      });
 
-    alert(`Appointment ${result.appointment.id} confirmed! Live schedule synchronized.`);
-    renderPatientAppointments(el, patient);
+      if (result && result.appointment) {
+        appState.updateItem('appointments', result.appointment.id, {
+          symptom_original_text: symptomInput.value.trim(),
+          normalized_symptoms: selectedSymptomCodes
+        });
+      }
+
+      renderPatientAppointments(el, patient);
+
+      // Show persistent confirmation banner with QR
+      const confirmBox = el.querySelector('#patient-booking-persistent-confirmation');
+      if (confirmBox && result && result.appointment) {
+        confirmBox.style.display = 'block';
+        confirmBox.innerHTML = `
+          <div class="card" style="border: 2px solid var(--primary); background: rgba(37, 99, 235, 0.05); padding: var(--space-4); border-radius: var(--radius-lg)">
+            <div class="flex items-center justify-between" style="flex-wrap: wrap; gap: 12px">
+              <div class="flex items-center gap-3">
+                <div style="width: 44px; height: 44px; border-radius: 50%; background: #22c55e; color: white; display: flex; align-items: center; justify-content: center; font-size: 20px">
+                  <i class="fas fa-check"></i>
+                </div>
+                <div>
+                  <h4 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary)">Appointment Confirmed (${result.appointment.id})</h4>
+                  <p style="margin: 0; font-size: 12px; color: var(--text-secondary)">Your appointment with Dr. ${docSelect.options[docSelect.selectedIndex]?.text || 'Physician'} has been confirmed.</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button class="btn btn-secondary btn-sm" onclick="window._showAppointmentQRModal('${result.appointment.id}')">
+                  <i class="fas fa-qrcode"></i> View QR
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="window.HospitalFlow.checkInPatient('${result.appointment.id}')">
+                  <i class="fas fa-sign-in-alt"></i> Express Check-In Now
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+        confirmBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    } catch (err) {
+      console.error('Appointment booking error:', err);
+      alert(err.message || 'Unable to book appointment.');
+    }
   });
 }
 
