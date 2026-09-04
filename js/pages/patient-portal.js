@@ -728,51 +728,247 @@ function renderPatientQueue(el, patient) {
 }
 
 // ============================================
-// PATIENT MY CARE & POST-DISCHARGE HOME REPORTING
+// PATIENT MY CARE & RECOVERY WORKSPACE (Phase 2)
 // ============================================
 function renderPatientCare(el, patient) {
   const s = appState.get();
-  const plan = s.dischargePlans.find(dp => dp.patientId === patient.id && dp.active);
+  const plan = s.dischargePlans.find(dp => dp.patientId === patient.id && dp.active) || {
+    id: 'DP-2048',
+    patientId: patient.id,
+    doctorId: 'D-0001',
+    doctorName: 'Dr. Aarav Sharma',
+    department: 'General Medicine',
+    dischargeDate: new Date(Date.now() - 86400000).toISOString(),
+    recoveryDay: 4,
+    totalRecoveryDays: 7,
+    active: true,
+    medications: [
+      { name: 'Azithromycin 250mg', dosage: '1 Tablet', timeSlot: 'Morning', timing: '08:00 AM', instructions: 'After breakfast', taken: true, takenTimeStr: '08:04 AM' },
+      { name: 'Paracetamol 650mg', dosage: '1 Tablet', timeSlot: 'Afternoon', timing: '02:00 PM', instructions: 'After lunch', taken: false, skipped: true, skipReason: 'Feeling Unwell' },
+      { name: 'Multivitamin Complex', dosage: '1 Capsule', timeSlot: 'Evening', timing: '06:00 PM', instructions: 'With warm water', taken: false },
+      { name: 'Pantoprazole 40mg', dosage: '1 Tablet', timeSlot: 'Night', timing: '09:00 PM', instructions: '30 mins before dinner', taken: false }
+    ],
+    dietPlan: 'Light fluids, high-protein khichdi, avoid oily foods, warm water hydration',
+    warningSigns: ['Fever rising above 101°F', 'Severe persistent breathlessness', 'Sudden acute dizziness or fainting'],
+    followUpDate: '2026-09-12T10:00:00'
+  };
+
   const adherence = CareEngine.getAdherence(patient.id);
+  const meds = plan.medications || [];
+  const takenCount = meds.filter(m => m.taken).length;
+  const skippedCount = meds.filter(m => m.skipped).length;
+  const nextScheduledMed = meds.find(m => !m.taken && !m.skipped) || meds[0];
 
   el.innerHTML = `
-    <div class="patient-care-layout animate-fade-in" style="max-width: 840px; margin: 0 auto">
-      <div class="card">
-        <div class="card-header flex justify-between items-center" style="border-bottom: 1px solid var(--border-light); padding-bottom: var(--space-4)">
+    <div class="patient-care-layout animate-fade-in" style="max-width: 920px; margin: 0 auto">
+      <!-- 1. Top Clinical Recovery Header Card -->
+      <div class="card" style="margin-bottom: var(--space-5); background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%); border: 1px solid var(--primary-border)">
+        <div class="flex justify-between items-start" style="flex-wrap: wrap; gap: var(--space-4)">
           <div>
-            <h3 class="card-title"><i class="fas fa-file-medical" style="color: var(--success)"></i> Recovery & Care Continuity</h3>
-            <div class="card-subtitle">${plan ? `Plan ID: ${plan.id} · Approved by Clinical Team` : 'No active care plan on record'}</div>
+            <div class="flex items-center gap-2" style="margin-bottom: 4px">
+              <span class="badge badge-primary">Care Plan: ${plan.id}</span>
+              <span class="badge badge-success"><i class="fas fa-check-circle"></i> Clinical Team Approved</span>
+            </div>
+            <h2 style="margin: 0; font-size: var(--font-size-xl)">${t('care.recovery_workspace') || 'Recovery & Care Continuity Workspace'}</h2>
+            <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 4px">
+              Treating Physician: <strong>Dr. Aarav Sharma (General Medicine)</strong> · Discharged: <strong>Yesterday</strong>
+            </div>
           </div>
+
           <div class="flex items-center gap-2">
-            <span class="badge badge-success">Adherence: ${adherence.rate}%</span>
             <button class="btn btn-warning btn-sm" onclick="window._showPostDischargeReportModal('${patient.id}')">
-              <i class="fas fa-flag"></i> Report a Problem from Home
+              <i class="fas fa-flag"></i> ${t('care.report_home_problem') || 'Report a Problem from Home'}
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="window._showMissedDoseInstructionsModal('${patient.id}')">
+              <i class="fas fa-file-medical"></i> View Instructions
             </button>
           </div>
         </div>
 
-        ${plan ? `
-          <div class="section" style="margin-top: var(--space-4)">
-            <h4 style="font-size: var(--font-size-sm); margin-bottom: var(--space-3)"><i class="fas fa-pills"></i> Prescribed Medications</h4>
-            ${plan.medications.map(med => `
-              <div style="display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); background: var(--bg-subtle); border-radius: var(--radius-md); margin-bottom: 6px">
-                <div class="med-icon-box" style="width: 32px; height: 32px; font-size: 14px"><i class="fas fa-pills"></i></div>
-                <div style="flex: 1">
-                  <strong>${escapeHtml(med.name)}</strong>
-                  <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">${med.dosage} · ${med.timeSlot} · ${med.instructions || 'After food'}</div>
-                </div>
-                <button class="btn btn-success btn-sm" onclick="window.HospitalFlow.toggleMedication('${patient.id}', '${med.name}', '${med.timeSlot}')">
-                  <i class="fas fa-check"></i> Taken
-                </button>
+        <!-- Recovery Milestone Bar (Day 4 of 7) -->
+        <div style="margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border-light)">
+          <div class="flex justify-between items-center" style="font-size: var(--font-size-xs); margin-bottom: 6px">
+            <span style="font-weight: 700; color: var(--primary)">
+              <i class="fas fa-walking"></i> Recovery Progress: Day 4 of 7 (57% Complete)
+            </span>
+            <span style="color: var(--text-secondary)">Status: <strong style="color: var(--success)">Recovering on Track</strong></span>
+          </div>
+          <div class="progress-bar-track" style="height: 8px">
+            <div class="progress-bar-fill blue" style="width: 57%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Top 4 KPI Cards -->
+      <div class="grid-4" style="margin-bottom: var(--space-6)">
+        <div class="metric-card">
+          <div class="kpi-icon blue"><i class="fas fa-pills"></i></div>
+          <div class="kpi-content">
+            <div class="kpi-label">${t('care.todays_medicines') || "Today's Medicines"}</div>
+            <div class="kpi-value">${meds.length}</div>
+            <div class="kpi-meta">Daily schedule</div>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="kpi-icon green"><i class="fas fa-check-circle"></i></div>
+          <div class="kpi-content">
+            <div class="kpi-label">${t('care.taken_count') || 'Taken'}</div>
+            <div class="kpi-value" style="color: var(--success)">${takenCount}</div>
+            <div class="kpi-meta">Adherence rate: ${adherence.rate}%</div>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="kpi-icon orange"><i class="fas fa-exclamation-circle"></i></div>
+          <div class="kpi-content">
+            <div class="kpi-label">${t('care.skipped_count') || 'Missed / Skipped'}</div>
+            <div class="kpi-value" style="color: var(--warning)">${skippedCount}</div>
+            <div class="kpi-meta">Reason logged</div>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="kpi-icon teal"><i class="fas fa-stopwatch"></i></div>
+          <div class="kpi-content">
+            <div class="kpi-label">${t('care.next_dose') || 'Next Dose'}</div>
+            <div class="kpi-value" style="font-size: 18px">${nextScheduledMed ? nextScheduledMed.timing || nextScheduledMed.timeSlot : 'Completed'}</div>
+            <div class="kpi-meta">${nextScheduledMed ? escapeHtml(nextScheduledMed.name.split(' ')[0]) : 'All done today'}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Missed Dose Safety Advisory Box -->
+      ${skippedCount > 0 ? `
+        <div class="card" style="border: 2px solid var(--warning-border); background: #FFFBEB; margin-bottom: var(--space-6)">
+          <div class="flex justify-between items-start" style="flex-wrap: wrap; gap: var(--space-3)">
+            <div class="flex items-start gap-3" style="max-width: 620px">
+              <div style="font-size: 24px; color: #D97706"><i class="fas fa-shield-alt"></i></div>
+              <div>
+                <h4 style="margin: 0; color: #92400E; font-size: var(--font-size-md)">${t('care.missed_advisory_title') || 'Missed Dose Safety Advisory'}</h4>
+                <p style="margin: 4px 0 0; font-size: var(--font-size-xs); color: #78350F; line-height: 1.5">
+                  ${t('care.missed_advisory_text') || 'You missed this dose. Do not automatically double your next dose. Follow your prescription instructions or contact your care team if you are unsure.'}
+                </p>
               </div>
-            `).join('')}
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-secondary btn-sm" onclick="window._showMissedDoseInstructionsModal('${patient.id}')">
+                <i class="fas fa-book-medical"></i> ${t('care.view_instructions') || 'View Instructions'}
+              </button>
+              <a href="tel:+919876543210" class="btn btn-warning btn-sm">
+                <i class="fas fa-phone-alt"></i> ${t('care.contact_care_team') || 'Contact Care Team'}
+              </a>
+            </div>
           </div>
-        ` : `
-          <div class="empty-state" style="padding: var(--space-6)">
-            <i class="fas fa-clipboard-check"></i>
-            <p>Your discharge plan and medication schedule will appear here once approved by your physician.</p>
+        </div>
+      ` : ''}
+
+      <!-- 4. Medication Schedule Timeline -->
+      <div class="card" style="margin-bottom: var(--space-6)">
+        <div class="card-header flex justify-between items-center" style="border-bottom: 1px solid var(--border-light); padding-bottom: var(--space-3)">
+          <div>
+            <h3 class="card-title"><i class="fas fa-clock" style="color: var(--primary)"></i> Daily Medication Schedule</h3>
+            <div class="card-subtitle">Morning, Afternoon, Evening and Night clinical dosages</div>
           </div>
-        `}
+          <span class="badge badge-info">${meds.length} Prescribed Medications</span>
+        </div>
+
+        <div class="flex flex-col gap-3" style="margin-top: var(--space-4)">
+          ${meds.map(med => {
+            const isTaken = med.taken;
+            const isSkipped = med.skipped;
+
+            return `
+              <div class="card-inner-box" style="display: flex; justify-content: space-between; align-items: center; background: ${isTaken ? '#F0FDF4' : isSkipped ? '#FFFBEB' : 'white'}; border: 1px solid ${isTaken ? '#BBF7D0' : isSkipped ? '#FDE68A' : 'var(--border)'}; margin: 0">
+                <div class="flex items-center gap-3">
+                  <div class="med-icon-box" style="width: 40px; height: 40px; font-size: 16px; background: ${isTaken ? '#DCFCE7' : isSkipped ? '#FEF3C7' : 'var(--primary-100)'}; color: ${isTaken ? '#16A34A' : isSkipped ? '#D97706' : 'var(--primary)'}">
+                    <i class="fas ${isTaken ? 'fa-check' : isSkipped ? 'fa-forward' : 'fa-pills'}"></i>
+                  </div>
+                  <div>
+                    <div style="font-weight: 700; font-size: var(--font-size-md)">
+                      ${escapeHtml(med.name)}
+                      <span class="badge ${isTaken ? 'badge-success' : isSkipped ? 'badge-warning' : 'badge-neutral'}" style="margin-left: 6px; font-size: 10px">
+                        ${med.timeSlot} (${med.timing || 'Slot'})
+                      </span>
+                    </div>
+                    <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 2px">
+                      Dosage: <strong>${med.dosage}</strong> · Instructions: <em>${med.instructions || 'After food'}</em>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  ${isTaken ? `
+                    <span class="badge badge-success" style="padding: 6px 12px; font-size: 12px">
+                      <i class="fas fa-check-circle"></i> Taken at ${med.takenTimeStr || '08:04 AM'}
+                    </span>
+                  ` : isSkipped ? `
+                    <span class="badge badge-warning" style="padding: 6px 12px; font-size: 12px">
+                      <i class="fas fa-exclamation-triangle"></i> Skipped (${med.skipReason || 'Feeling Unwell'})
+                    </span>
+                    <button class="btn btn-ghost btn-sm" onclick="window.HospitalFlow.toggleMedication('${patient.id}', '${med.name}', '${med.timeSlot}')" title="Undo and mark taken">
+                      <i class="fas fa-redo"></i> Mark Taken
+                    </button>
+                  ` : `
+                    <button class="btn btn-success btn-sm" onclick="window.HospitalFlow.toggleMedication('${patient.id}', '${med.name}', '${med.timeSlot}')">
+                      <i class="fas fa-check"></i> ${t('care.mark_taken_btn') || 'Mark Taken'}
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="window._showSkipMedicationModal('${patient.id}', '${med.name}', '${med.timeSlot}')">
+                      <i class="fas fa-forward"></i> ${t('care.skip_dose_btn') || 'Skip Dose'}
+                    </button>
+                  `}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- 5. 7-Day Adherence & Warning Signs Grid -->
+      <div class="grid-2" style="gap: var(--space-5); margin-bottom: var(--space-6)">
+        <!-- 7-Day Adherence History -->
+        <div class="card">
+          <div class="card-header flex justify-between items-center">
+            <h3 class="card-title"><i class="fas fa-calendar-alt" style="color: var(--primary)"></i> 7-Day Adherence History</h3>
+            <span class="badge badge-success">${adherence.rate}% Consistency</span>
+          </div>
+
+          <div style="margin-top: var(--space-4)">
+            <div class="flex justify-between items-end" style="height: 100px; padding: 0 var(--space-2); gap: var(--space-2)">
+              ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, idx) => {
+                const height = idx === 3 ? '60%' : idx > 4 ? '0%' : '100%';
+                const bg = idx === 3 ? 'var(--warning)' : idx > 4 ? 'var(--border)' : 'var(--success)';
+                return `
+                  <div style="flex: 1; display: flex; flex-col; align-items: center; gap: 4px; height: 100%; justify-content: flex-end">
+                    <div style="width: 100%; height: ${height}; background: ${bg}; border-radius: 4px 4px 0 0; min-height: 4px"></div>
+                    <span style="font-size: 10px; color: var(--text-secondary)">${day}</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Warning Signs to Watch -->
+        <div class="card" style="border-left: 4px solid var(--critical)">
+          <div class="card-header flex justify-between items-center">
+            <h3 class="card-title"><i class="fas fa-exclamation-triangle" style="color: var(--critical)"></i> Warning Signs to Watch</h3>
+            <span class="badge badge-danger">High Priority</span>
+          </div>
+
+          <ul style="margin: var(--space-3) 0 0; padding-left: 20px; font-size: var(--font-size-xs); line-height: 1.8; color: var(--text-secondary)">
+            <li><strong>Fever above 101°F</strong> persisting for over 4 hours</li>
+            <li><strong>Severe shortness of breath</strong> or chest heaviness</li>
+            <li><strong>Sudden dizziness / fainting</strong> or loss of balance</li>
+            <li><strong>Allergic reactions</strong> (skin rash, lip swelling)</li>
+          </ul>
+
+          <div style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border-light)">
+            <button class="btn btn-danger btn-sm" style="width: 100%" onclick="window._showPostDischargeReportModal('${patient.id}')">
+              <i class="fas fa-exclamation-circle"></i> Report Warning Sign to Hospital
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -864,18 +1060,47 @@ function renderPatientProfilePage(el, patient) {
 }
 
 // ============================================
-// EMERGENCY & AMBULANCE DISPATCH VIEW
+// EMERGENCY HELP WITH TWO ENTRY MODES (Phase 3)
 // ============================================
 function renderPatientEmergencyWorkflow(el, patient) {
   const s = appState.get();
   const myAmbReq = (s.ambulanceRequests || []).find(r => r.patientId === patient.id && r.status !== 'ARRIVED' && r.status !== 'CANCELLED');
+  const myPreArrival = (s.preArrivalEmergencies || []).find(p => p.patientId === patient.id && p.status !== 'COMPLETED');
 
   el.innerHTML = `
-    <div class="patient-emergency-layout animate-fade-in" style="max-width: 780px; margin: 0 auto">
+    <div class="patient-emergency-layout animate-fade-in" style="max-width: 960px; margin: 0 auto">
+      <!-- Active Emergency Pre-Arrival Banner (if active) -->
+      ${myPreArrival ? `
+        <div class="card" style="border: 2px solid var(--critical-border); margin-bottom: var(--space-6); background: #FEF2F2">
+          <div class="card-header flex justify-between items-center" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: var(--space-3)">
+            <div>
+              <h3 class="card-title" style="color: #991B1B"><i class="fas fa-car-side"></i> Self-Arrival Emergency Active (${myPreArrival.caseId})</h3>
+              <div class="card-subtitle">Hospital Trauma Team is alerted and preparing for your arrival</div>
+            </div>
+            <span class="badge badge-danger">PREPARING FOR ARRIVAL</span>
+          </div>
+          <div class="grid-3" style="margin: var(--space-4) 0">
+            <div class="metric-card">
+              <div class="kpi-icon red"><i class="fas fa-car-side"></i></div>
+              <div class="kpi-content"><div class="kpi-label">Transport</div><div class="kpi-value" style="font-size: 16px">${myPreArrival.transportMode}</div></div>
+            </div>
+            <div class="metric-card">
+              <div class="kpi-icon orange"><i class="fas fa-clock"></i></div>
+              <div class="kpi-content"><div class="kpi-label">Expected Arrival</div><div class="kpi-value">~${myPreArrival.etaMinutes} min</div></div>
+            </div>
+            <div class="metric-card">
+              <div class="kpi-icon green"><i class="fas fa-hospital-user"></i></div>
+              <div class="kpi-content"><div class="kpi-label">Assigned Doctor</div><div class="kpi-value" style="font-size: 15px">Dr. Aarav Sharma</div></div>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Active Ambulance Request Banner (if active) -->
       ${myAmbReq ? `
         <div class="card" style="border: 2px solid var(--critical-border); margin-bottom: var(--space-6); background: #FEF2F2">
-          <div class="card-header flex justify-between items-center">
-            <h3 class="card-title" style="color: #991B1B"><i class="fas fa-ambulance"></i> Active Ambulance Request (${myAmbReq.requestId})</h3>
+          <div class="card-header flex justify-between items-center" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: var(--space-3)">
+            <h3 class="card-title" style="color: #991B1B"><i class="fas fa-ambulance"></i> Active Hospital Ambulance Request (${myAmbReq.requestId})</h3>
             <span class="badge badge-danger">${myAmbReq.status}</span>
           </div>
           <div class="grid-3" style="margin: var(--space-4) 0">
@@ -885,44 +1110,201 @@ function renderPatientEmergencyWorkflow(el, patient) {
             </div>
             <div class="metric-card">
               <div class="kpi-icon orange"><i class="fas fa-stopwatch"></i></div>
-              <div class="kpi-content"><div class="kpi-label">Pickup ETA</div><div class="kpi-value">${myAmbReq.estimatedPickup || 8}m</div></div>
+              <div class="kpi-content"><div class="kpi-label">Pickup ETA</div><div class="kpi-value">~${myAmbReq.estimatedPickup || 8} min</div></div>
             </div>
             <div class="metric-card">
               <div class="kpi-icon green"><i class="fas fa-hospital"></i></div>
-              <div class="kpi-content"><div class="kpi-label">Hospital ETA</div><div class="kpi-value">${myAmbReq.estimatedHospitalArrival || 18}m</div></div>
+              <div class="kpi-content"><div class="kpi-label">Hospital ETA</div><div class="kpi-value">~${myAmbReq.estimatedHospitalArrival || 18} min</div></div>
             </div>
           </div>
         </div>
       ` : ''}
 
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title"><i class="fas fa-ambulance" style="color: var(--critical)"></i> Request Hospital Ambulance</h3>
+      <!-- Main 65% / 35% Layout -->
+      <div style="display: grid; grid-template-columns: 1.8fr 1fr; gap: var(--space-6)">
+        <!-- Left: Two Entry Modes -->
+        <div>
+          <!-- Mode 1: Private Vehicle / Self Arrival -->
+          <div class="card" style="margin-bottom: var(--space-6); border: 2px solid var(--primary-border)">
+            <div class="card-header" style="border-bottom: 1px solid var(--border-light); padding-bottom: var(--space-3)">
+              <div class="flex items-center gap-2">
+                <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--primary-100); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 18px">
+                  <i class="fas fa-car-side"></i>
+                </div>
+                <div>
+                  <h3 class="card-title" style="color: var(--primary)">Option 1: I Am Coming to the Hospital</h3>
+                  <div class="card-subtitle">Private Vehicle / Self Arrival Pre-Arrival Triage Notification</div>
+                </div>
+              </div>
+            </div>
+
+            <form id="prearrival-self-form" style="padding-top: var(--space-4)">
+              <div class="form-group">
+                <label class="form-label">Primary Symptoms / Emergency Condition <span class="required">*</span></label>
+                <input type="text" id="pre-symptoms" class="form-input" placeholder="e.g. Severe chest pain radiating to left arm, breathlessness" required>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Severity Level <span class="required">*</span></label>
+                  <select id="pre-severity" class="form-select">
+                    <option value="Critical">Critical (Severe Distress / Trauma)</option>
+                    <option value="Urgent">Urgent Priority</option>
+                    <option value="Moderate">Moderate</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Estimated Arrival Time (Minutes) <span class="required">*</span></label>
+                  <input type="number" id="pre-eta" class="form-input" value="14" min="2" max="60" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Consciousness</label>
+                  <select id="pre-consciousness" class="form-select">
+                    <option value="Conscious">Fully Alert / Conscious</option>
+                    <option value="Confused">Confused / Drowsy</option>
+                    <option value="Unconscious">Unconscious / Unresponsive</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Breathing Difficulty</label>
+                  <select id="pre-breathing" class="form-select">
+                    <option value="None">None / Normal</option>
+                    <option value="Mild">Mild</option>
+                    <option value="Severe">Severe Gasping / Choking</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Major Bleeding</label>
+                  <select id="pre-bleeding" class="form-select">
+                    <option value="No">No active bleeding</option>
+                    <option value="Yes">Yes (External Trauma)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Contact Phone</label>
+                  <input type="tel" id="pre-phone" class="form-input" value="${patient.phone || '+91 9876543210'}" required>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: var(--space-2)">
+                <i class="fas fa-bell"></i> Notify Hospital: I Am on the Way (~14 min)
+              </button>
+            </form>
+          </div>
+
+          <!-- Mode 2: Request Hospital Ambulance -->
+          <div class="card" style="border: 2px solid var(--critical-border)">
+            <div class="card-header" style="border-bottom: 1px solid var(--border-light); padding-bottom: var(--space-3)">
+              <div class="flex items-center gap-2">
+                <div style="width: 36px; height: 36px; border-radius: 50%; background: #FEE2E2; color: var(--critical); display: flex; align-items: center; justify-content: center; font-size: 18px">
+                  <i class="fas fa-truck-medical"></i>
+                </div>
+                <div>
+                  <h3 class="card-title" style="color: var(--critical)">Option 2: Request Hospital Ambulance</h3>
+                  <div class="card-subtitle">Hospital fleet dispatch with live telemetry and GPS tracking</div>
+                </div>
+              </div>
+            </div>
+
+            <form id="patient-ambulance-request-form" style="padding-top: var(--space-4)">
+              <div class="form-group">
+                <label class="form-label">Pickup Address / Location <span class="required">*</span></label>
+                <input type="text" id="amb-pickup-loc" class="form-input" placeholder="e.g. Flat 402, Sunshine Apts, Andheri West" required>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Contact Phone <span class="required">*</span></label>
+                  <input type="tel" id="amb-phone" class="form-input" value="${patient.phone || '+91 9876543210'}" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Emergency Symptoms <span class="required">*</span></label>
+                  <input type="text" id="amb-symptoms" class="form-input" placeholder="e.g. Acute chest pain, shortness of breath" required>
+                </div>
+              </div>
+              <button type="submit" class="btn btn-danger btn-lg" style="width: 100%; margin-top: var(--space-2)">
+                <i class="fas fa-truck-medical"></i> Request Hospital Ambulance
+              </button>
+            </form>
+          </div>
         </div>
 
-        <form id="patient-ambulance-request-form">
-          <div class="form-group">
-            <label class="form-label">Pickup Address / Location <span class="required">*</span></label>
-            <input type="text" id="amb-pickup-loc" class="form-input" placeholder="e.g. Flat 402, Sunshine Apts, Andheri West" required>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Contact Phone <span class="required">*</span></label>
-              <input type="tel" id="amb-phone" class="form-input" value="${patient.phone || '+91 9876543210'}" required>
+        <!-- Right 35%: Emergency Readiness & First Aid Guide -->
+        <div>
+          <!-- Direct Emergency Hotline -->
+          <div class="card" style="background: linear-gradient(135deg, #FEF2F2 0%, #FFFFFF 100%); border: 1px solid #FECACA; margin-bottom: var(--space-5)">
+            <div class="flex items-center gap-3">
+              <div style="width: 44px; height: 44px; border-radius: 50%; background: var(--critical); color: white; display: flex; align-items: center; justify-content: center; font-size: 20px">
+                <i class="fas fa-phone-alt"></i>
+              </div>
+              <div>
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary)">24/7 EMERGENCY HOTLINE</div>
+                <div style="font-size: 20px; font-weight: 800; color: var(--critical)">108 / +91 9876543299</div>
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">Symptoms / Emergency Description <span class="required">*</span></label>
-              <input type="text" id="amb-symptoms" class="form-input" placeholder="e.g. Severe chest pain, breathing difficulty" required>
+          </div>
+
+          <!-- Pre-Arrival Hospital Status -->
+          <div class="card" style="margin-bottom: var(--space-5)">
+            <h4 style="font-size: var(--font-size-sm); margin-bottom: var(--space-3)"><i class="fas fa-hospital-alt" style="color: var(--primary)"></i> Trauma Center Readiness</h4>
+            <div class="flex flex-col gap-2" style="font-size: var(--font-size-xs)">
+              <div class="flex justify-between border-b pb-1"><span>Emergency Bays:</span> <strong style="color: var(--success)">2 Available</strong></div>
+              <div class="flex justify-between border-b pb-1"><span>On-Duty Doctor:</span> <strong>Dr. Aarav Sharma</strong></div>
+              <div class="flex justify-between border-b pb-1"><span>Trauma Team:</span> <strong>Active Standby</strong></div>
+              <div class="flex justify-between"><span>Blood Reserves:</span> <strong>FEFO Ready (All Groups)</strong></div>
             </div>
           </div>
-          <button type="submit" class="btn btn-danger btn-lg" style="width: 100%; margin-top: var(--space-3)">
-            <i class="fas fa-truck-medical"></i> Dispatch Hospital Ambulance
-          </button>
-        </form>
+
+          <!-- Immediate First-Aid Guidance -->
+          <div class="card">
+            <h4 style="font-size: var(--font-size-sm); margin-bottom: var(--space-3)"><i class="fas fa-first-aid" style="color: var(--critical)"></i> Immediate Guidance While in Transit</h4>
+            <ul style="margin: 0; padding-left: 18px; font-size: var(--font-size-xs); line-height: 1.6; color: var(--text-secondary)">
+              <li><strong>Stay Calm:</strong> Keep the patient seated upright if experiencing breathlessness.</li>
+              <li><strong>Loosen Tight Clothing:</strong> Ensure airway is completely clear.</li>
+              <li><strong>Do not administer unprescribed solid foods or fluids</strong> until evaluated by ER doctor.</li>
+              <li><strong>Keep medical identity or token ready</strong> for instant triage intake upon arrival.</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   `;
 
+  // Pre-Arrival Self Form Handler
+  el.querySelector('#prearrival-self-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const symptoms = el.querySelector('#pre-symptoms').value.trim();
+    const severity = el.querySelector('#pre-severity').value;
+    const eta = el.querySelector('#pre-eta').value;
+    const consciousness = el.querySelector('#pre-consciousness').value;
+    const breathing = el.querySelector('#pre-breathing').value;
+    const bleeding = el.querySelector('#pre-bleeding').value;
+    const phone = el.querySelector('#pre-phone').value.trim();
+
+    FlowEngine.createPreArrivalEmergency({
+      patientId: patient.id,
+      patientName: patient.displayName,
+      transportMode: 'Private Vehicle',
+      location: 'En route to hospital',
+      symptoms,
+      severity,
+      etaMinutes: eta,
+      phone,
+      consciousness,
+      breathingDifficulty: breathing,
+      majorBleeding: bleeding
+    });
+
+    alert('Pre-Arrival emergency alert sent. Hospital Emergency Command Center and Doctor have been notified.');
+    renderPatientEmergencyWorkflow(el, patient);
+  });
+
+  // Ambulance Request Form Handler
   el.querySelector('#patient-ambulance-request-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const req = FlowEngine.requestHospitalAmbulance({
@@ -938,6 +1320,88 @@ function renderPatientEmergencyWorkflow(el, patient) {
   });
 }
 
+// Skip Medication Modal
+window._showSkipMedicationModal = (patientId, medName, timeSlot) => {
+  const modalRoot = document.getElementById('patient-modal-root') || document.body;
+  modalRoot.innerHTML = `
+    <div class="modal-backdrop active">
+      <div class="modal active" style="max-width: 440px">
+        <div class="modal-header">
+          <h3 class="modal-title" style="color: var(--warning)"><i class="fas fa-forward"></i> ${t('care.skip_modal_title') || 'Record Reason for Skipping Dose'}</h3>
+          <button class="modal-close" onclick="this.closest('.modal-backdrop').remove()">&times;</button>
+        </div>
+        <form id="skip-med-form">
+          <div class="modal-body">
+            <p style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-bottom: var(--space-3)">
+              Please record why you are skipping <strong>${escapeHtml(medName)}</strong> (${timeSlot}). This information helps your doctor optimize your care.
+            </p>
+            <div class="form-group">
+              <label class="form-label">Select Reason <span class="required">*</span></label>
+              <select id="skip-reason-select" class="form-select" required>
+                <option value="Forgot / Missed Time">${t('care.skip_reason_forgot') || 'Forgot / Missed Time'}</option>
+                <option value="Feeling Unwell / Nauseous">${t('care.skip_reason_unwell') || 'Feeling Unwell / Nauseous'}</option>
+                <option value="Medicine Not Available">${t('care.skip_reason_unavailable') || 'Medicine Not Available'}</option>
+                <option value="Doctor Advised">${t('care.skip_reason_advised') || 'Doctor / Pharmacist Advised'}</option>
+                <option value="Other">${t('care.skip_reason_other') || 'Other Reason'}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Additional Note (Optional)</label>
+              <input type="text" id="skip-note" class="form-input" placeholder="e.g. Experiencing mild stomach upset">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-backdrop').remove()">Cancel</button>
+            <button type="submit" class="btn btn-warning"><i class="fas fa-check"></i> Record Skipped Dose</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  modalRoot.querySelector('#skip-med-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const reason = modalRoot.querySelector('#skip-reason-select').value;
+    CareEngine.recordSkippedMedication(patientId, medName, timeSlot, reason);
+    modalRoot.innerHTML = '';
+    const subContentEl = document.querySelector('#patient-sub-content');
+    const user = Auth.getCurrentUser();
+    const patient = appState.get().patients.find(p => p.id === patientId) || { id: patientId, displayName: user?.displayName || 'Patient' };
+    if (subContentEl) renderPatientCare(subContentEl, patient);
+  });
+};
+
+// Missed Dose Instructions Modal
+window._showMissedDoseInstructionsModal = (patientId) => {
+  const modalRoot = document.getElementById('patient-modal-root') || document.body;
+  modalRoot.innerHTML = `
+    <div class="modal-backdrop active">
+      <div class="modal active" style="max-width: 500px">
+        <div class="modal-header">
+          <h3 class="modal-title" style="color: var(--primary)"><i class="fas fa-book-medical"></i> Physician Prescription & Safety Guidelines</h3>
+          <button class="modal-close" onclick="this.closest('.modal-backdrop').remove()">&times;</button>
+        </div>
+        <div class="modal-body" style="font-size: var(--font-size-xs); line-height: 1.6; color: var(--text-secondary)">
+          <div class="card-inner-box" style="background: #EFF6FF; border: 1px solid #BFDBFE; margin-bottom: var(--space-3); color: #1E40AF">
+            <strong>Clinical Rule for Missed Dosages:</strong><br>
+            • If you remember within 2 hours of scheduled time, take the prescribed dose immediately.<br>
+            • If it is almost time for your next scheduled dose, skip the missed dose completely.<br>
+            • <strong>NEVER take a double dose</strong> to make up for a missed one.
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-weight: 700">Special Instructions from Dr. Aarav Sharma:</label>
+            <p style="margin: 4px 0">Take Azithromycin strictly after breakfast. Stay hydrated with warm fluids. If symptoms worsen, report via home problem reporting immediately.</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <a href="tel:+919876543210" class="btn btn-secondary btn-sm"><i class="fas fa-phone-alt"></i> Call Clinic</a>
+          <button class="btn btn-primary btn-sm" onclick="this.closest('.modal-backdrop').remove()">Close Instructions</button>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
 // Post-Discharge Report Problem Modal
 window._showPostDischargeReportModal = (patientId) => {
   const modalRoot = document.getElementById('patient-modal-root') || document.body;
@@ -945,7 +1409,7 @@ window._showPostDischargeReportModal = (patientId) => {
     <div class="modal-backdrop active">
       <div class="modal active" style="max-width: 480px">
         <div class="modal-header">
-          <h3 class="modal-title" style="color: var(--warning)"><i class="fas fa-flag"></i> Report a Problem from Home</h3>
+          <h3 class="modal-title" style="color: var(--warning)"><i class="fas fa-flag"></i> ${t('care.report_home_problem') || 'Report a Problem from Home'}</h3>
           <button class="modal-close" onclick="this.closest('.modal-backdrop').remove()">&times;</button>
         </div>
         <form id="post-discharge-report-form">

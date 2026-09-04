@@ -68,7 +68,13 @@ const HospitalFlow = {
   callPatient(queueEntryId) {
     FlowEngine.callPatient(queueEntryId);
     const user = Auth.getCurrentUser();
-    Router.navigate(user?.role === 'doctor' ? '/doctor/queue' : '/admin/flow');
+    Router.navigate(user?.role === 'doctor' ? '/doctor/dashboard' : '/admin/flow');
+  },
+
+  markPatientInRoom(queueEntryId) {
+    FlowEngine.markPatientInRoom(queueEntryId);
+    const user = Auth.getCurrentUser();
+    Router.navigate(user?.role === 'doctor' ? '/doctor/dashboard' : '/admin/flow');
   },
 
   startConsultation(queueEntryId) {
@@ -81,6 +87,10 @@ const HospitalFlow = {
     FlowEngine.completeConsultation(queueEntryId);
     const user = Auth.getCurrentUser();
     Router.navigate(user?.role === 'doctor' ? '/doctor/dashboard' : '/admin/flow');
+  },
+
+  createPreArrivalEmergency(data) {
+    return FlowEngine.createPreArrivalEmergency(data);
   },
 
   transferPatient(queueEntryId, toDoctorId) {

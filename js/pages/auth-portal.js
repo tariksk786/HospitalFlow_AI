@@ -198,9 +198,15 @@ export function renderPatientLogin(container) {
                   </select>
                 </div>
               </div>
-              <div class="form-group">
-                <label class="form-label">Password <span class="required">*</span></label>
-                <input type="password" id="reg-password" class="form-input" placeholder="Create a secure password" required autocomplete="new-password">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Password <span class="required">*</span></label>
+                  <input type="password" id="reg-password" class="form-input" placeholder="Min. 4 characters" required autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Confirm Password <span class="required">*</span></label>
+                  <input type="password" id="reg-password-confirm" class="form-input" placeholder="Repeat password" required autocomplete="new-password">
+                </div>
               </div>
               <button type="submit" class="btn btn-primary btn-lg" style="width: 100%" id="register-btn">
                 <i class="fas fa-user-check"></i> Complete Registration & Log In
@@ -249,17 +255,29 @@ export function renderPatientLogin(container) {
       const gender = container.querySelector('#reg-gender').value;
       const bloodGroup = container.querySelector('#reg-blood').value;
       const password = container.querySelector('#reg-password').value;
+      const passwordConfirm = container.querySelector('#reg-password-confirm').value;
       const alertEl = container.querySelector('#login-alert');
       const alertText = container.querySelector('#login-alert-text');
       const submitBtn = container.querySelector('#register-btn');
 
       try {
+        if (password !== passwordConfirm) {
+          throw new Error('Passwords do not match.');
+        }
+
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating account...';
         alertEl.style.display = 'none';
 
         const user = await Auth.registerPatient({
-          name, email, phone, age, gender, bloodGroup, password
+          displayName: name,
+          name,
+          email,
+          phone,
+          age,
+          gender,
+          bloodGroup,
+          password
         });
 
         Router.navigate('/patient/home');

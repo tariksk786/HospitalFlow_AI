@@ -144,18 +144,18 @@ appointments.forEach(apt => {
 // BLOOD INVENTORY (Whole Blood for each group)
 // ============================================
 const bloodInventory = [
-  { id: 'BI-001', facilityId: 'FAC-001', bloodGroup: 'A+', component: 'Whole Blood', units: 28, reservedUnits: 3, collectionDate: relDate(-10), expiryDate: relDate(25), status: 'Adequate', updatedAt: today(8, 0) },
-  { id: 'BI-002', facilityId: 'FAC-001', bloodGroup: 'A-', component: 'Whole Blood', units: 8, reservedUnits: 2, collectionDate: relDate(-15), expiryDate: relDate(20), status: 'Low', updatedAt: today(8, 0) },
-  { id: 'BI-003', facilityId: 'FAC-001', bloodGroup: 'B+', component: 'Whole Blood', units: 22, reservedUnits: 4, collectionDate: relDate(-8), expiryDate: relDate(27), status: 'Adequate', updatedAt: today(8, 0) },
-  { id: 'BI-004', facilityId: 'FAC-001', bloodGroup: 'B-', component: 'Whole Blood', units: 6, reservedUnits: 1, collectionDate: relDate(-20), expiryDate: relDate(15), status: 'Low', updatedAt: today(8, 0) },
-  { id: 'BI-005', facilityId: 'FAC-001', bloodGroup: 'AB+', component: 'Whole Blood', units: 12, reservedUnits: 0, collectionDate: relDate(-5), expiryDate: relDate(30), status: 'Low', updatedAt: today(8, 0) },
-  { id: 'BI-006', facilityId: 'FAC-001', bloodGroup: 'AB-', component: 'Whole Blood', units: 4, reservedUnits: 1, collectionDate: relDate(-25), expiryDate: relDate(10), status: 'Critical', updatedAt: today(8, 0) },
-  { id: 'BI-007', facilityId: 'FAC-001', bloodGroup: 'O+', component: 'Whole Blood', units: 35, reservedUnits: 5, collectionDate: relDate(-3), expiryDate: relDate(32), status: 'Adequate', updatedAt: today(8, 0) },
-  { id: 'BI-008', facilityId: 'FAC-001', bloodGroup: 'O-', component: 'Whole Blood', units: 3, reservedUnits: 1, collectionDate: relDate(-18), expiryDate: relDate(17), status: 'Critical', updatedAt: today(8, 0) },
+  { id: 'BI-001', facilityId: 'FAC-001', bloodGroup: 'A+', component: 'Whole Blood', units: 8, available: 6, reservedUnits: 2, expiringSoon: 1, collectionDate: relDate(-10), expiryDate: relDate(25), status: 'Adequate', updatedAt: today(8, 0) },
+  { id: 'BI-002', facilityId: 'FAC-001', bloodGroup: 'A-', component: 'Whole Blood', units: 3, available: 2, reservedUnits: 1, expiringSoon: 1, collectionDate: relDate(-15), expiryDate: relDate(20), status: 'Low', updatedAt: today(8, 0) },
+  { id: 'BI-003', facilityId: 'FAC-001', bloodGroup: 'B+', component: 'Whole Blood', units: 7, available: 5, reservedUnits: 2, expiringSoon: 0, collectionDate: relDate(-8), expiryDate: relDate(27), status: 'Adequate', updatedAt: today(8, 0) },
+  { id: 'BI-004', facilityId: 'FAC-001', bloodGroup: 'B-', component: 'Whole Blood', units: 2, available: 1, reservedUnits: 1, expiringSoon: 1, collectionDate: relDate(-20), expiryDate: relDate(15), status: 'Low', updatedAt: today(8, 0) },
+  { id: 'BI-005', facilityId: 'FAC-001', bloodGroup: 'AB+', component: 'Whole Blood', units: 4, available: 3, reservedUnits: 1, expiringSoon: 0, collectionDate: relDate(-5), expiryDate: relDate(30), status: 'Low', updatedAt: today(8, 0) },
+  { id: 'BI-006', facilityId: 'FAC-001', bloodGroup: 'AB-', component: 'Whole Blood', units: 1, available: 1, reservedUnits: 0, expiringSoon: 1, collectionDate: relDate(-25), expiryDate: relDate(10), status: 'Critical', updatedAt: today(8, 0) },
+  { id: 'BI-007', facilityId: 'FAC-001', bloodGroup: 'O+', component: 'Whole Blood', units: 9, available: 7, reservedUnits: 2, expiringSoon: 1, collectionDate: relDate(-3), expiryDate: relDate(32), status: 'Adequate', updatedAt: today(8, 0) },
+  { id: 'BI-008', facilityId: 'FAC-001', bloodGroup: 'O-', component: 'Whole Blood', units: 3, available: 2, reservedUnits: 1, expiringSoon: 1, collectionDate: relDate(-18), expiryDate: relDate(17), status: 'Critical', updatedAt: today(8, 0) },
   // Packed RBCs
-  { id: 'BI-009', facilityId: 'FAC-001', bloodGroup: 'O+', component: 'Packed RBCs', units: 15, reservedUnits: 2, collectionDate: relDate(-6), expiryDate: relDate(29), status: 'Adequate', updatedAt: today(8, 0) },
-  { id: 'BI-010', facilityId: 'FAC-001', bloodGroup: 'A+', component: 'Packed RBCs', units: 10, reservedUnits: 1, collectionDate: relDate(-7), expiryDate: relDate(28), status: 'Low', updatedAt: today(8, 0) },
-  { id: 'BI-011', facilityId: 'FAC-001', bloodGroup: 'O-', component: 'Packed RBCs', units: 2, reservedUnits: 0, collectionDate: relDate(-12), expiryDate: relDate(23), status: 'Critical', updatedAt: today(8, 0) },
+  { id: 'BI-009', facilityId: 'FAC-001', bloodGroup: 'O+', component: 'Packed RBCs', units: 6, available: 5, reservedUnits: 1, expiringSoon: 0, collectionDate: relDate(-6), expiryDate: relDate(29), status: 'Adequate', updatedAt: today(8, 0) },
+  { id: 'BI-010', facilityId: 'FAC-001', bloodGroup: 'A+', component: 'Packed RBCs', units: 5, available: 4, reservedUnits: 1, expiringSoon: 0, collectionDate: relDate(-7), expiryDate: relDate(28), status: 'Low', updatedAt: today(8, 0) },
+  { id: 'BI-011', facilityId: 'FAC-001', bloodGroup: 'O-', component: 'Packed RBCs', units: 2, available: 1, reservedUnits: 1, expiringSoon: 1, collectionDate: relDate(-12), expiryDate: relDate(23), status: 'Critical', updatedAt: today(8, 0) },
 ];
 
 // ============================================
@@ -383,13 +383,23 @@ const medicationTracking = {
 // DEMO USERS
 // ============================================
 const demoUsers = [
+  // Primary Accounts
   { id: 'u-admin', email: 'admin@hospitalflow.ai', displayName: 'Admin User', role: 'admin', department: null, phone: '+91 9876543210' },
   { id: 'u-doc-1', email: 'dr.sharma@hospitalflow.ai', displayName: 'Dr. Aarav Sharma', role: 'doctor', department: 'General Medicine', phone: '+91 9876543211', doctorId: 'D-0001' },
   { id: 'u-doc-2', email: 'dr.patel@hospitalflow.ai', displayName: 'Dr. Priya Patel', role: 'doctor', department: 'General Medicine', phone: '+91 9876543215', doctorId: 'D-0002' },
   { id: 'u-doc-3', email: 'dr.mehta@hospitalflow.ai', displayName: 'Dr. Rajesh Mehta', role: 'doctor', department: 'Cardiology', phone: '+91 9876543216', doctorId: 'D-0003' },
   { id: 'u-reception', email: 'reception@hospitalflow.ai', displayName: 'Priya Menon', role: 'reception', department: null, phone: '+91 9876543212' },
   { id: 'u-bloodbank', email: 'bloodbank@hospitalflow.ai', displayName: 'Rahul Deshmukh', role: 'blood_bank', department: null, phone: '+91 9876543213' },
-  { id: 'u-pat-1', email: 'amit.kumar@email.com', displayName: 'Amit Kumar', role: 'patient', department: null, phone: '+91 9876543214', patientId: 'P-1001' }
+  { id: 'u-pat-1', email: 'amit.kumar@email.com', displayName: 'Amit Kumar', role: 'patient', department: null, phone: '+91 9876543214', patientId: 'P-1001' },
+
+  // Seeded Demo Testing Accounts (Phase 9)
+  { id: 'u-pat-demo-1', email: 'amit.demo@hospitalflow.ai', displayName: 'Amit Kumar (Demo)', role: 'patient', department: null, phone: '+91 9876543214', patientId: 'P-1001' },
+  { id: 'u-pat-demo-2', email: 'neha.demo@hospitalflow.ai', displayName: 'Neha Sharma (Demo)', role: 'patient', department: null, phone: '+91 9876543215', patientId: 'P-1002' },
+  { id: 'u-pat-demo-3', email: 'rahul.demo@hospitalflow.ai', displayName: 'Rahul Joshi (Demo)', role: 'patient', department: null, phone: '+91 9876543216', patientId: 'P-1003' },
+  { id: 'u-doc-demo-1', email: 'sharma.demo@hospitalflow.ai', displayName: 'Dr. Aarav Sharma (Demo)', role: 'doctor', department: 'General Medicine', phone: '+91 9876543211', doctorId: 'D-0001' },
+  { id: 'u-doc-demo-2', email: 'mehta.demo@hospitalflow.ai', displayName: 'Dr. Rajesh Mehta (Demo)', role: 'doctor', department: 'Cardiology', phone: '+91 9876543216', doctorId: 'D-0003' },
+  { id: 'u-doc-demo-3', email: 'patel.demo@hospitalflow.ai', displayName: 'Dr. Priya Patel (Demo)', role: 'doctor', department: 'General Medicine', phone: '+91 9876543215', doctorId: 'D-0002' },
+  { id: 'u-admin-demo', email: 'admin.demo@hospitalflow.ai', displayName: 'Admin Operations (Demo)', role: 'admin', department: null, phone: '+91 9876543210' }
 ];
 
 // ============================================

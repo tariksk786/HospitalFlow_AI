@@ -168,10 +168,19 @@ function renderCapacityTab(el) {
 // ============================================
 // 2. EMERGENCY IMPACT & FLOW RECOVERY TAB
 // ============================================
+// 2. EMERGENCY IMPACT & FLOW RECOVERY TAB
+// ============================================
 function renderRecoveryTab(el) {
   const s = appState.get();
   const impactSummary = impactEngine.getImpactSummary();
-  const recState = s.flowRecoveryState || { status: 'NORMALIZED', recoveryPercentage: 94, baselineWait: 18, peakWait: 18, currentWait: 18 };
+  const recState = s.flowRecoveryState?.['General Medicine'] || s.flowRecoveryState || {
+    status: 'NORMALIZED',
+    recoveryPercentage: 94,
+    baselineWait: 18,
+    peakWait: 31,
+    currentWait: 20
+  };
+  const isInterventionApplied = s.lastInterventionApplied || recState.status === 'RECOVERING';
   const recommendations = impactEngine.getRecommendations();
 
   el.innerHTML = `
@@ -183,24 +192,63 @@ function renderRecoveryTab(el) {
             <i class="fas fa-heartbeat"></i> Flow Recovery Intelligence
           </h3>
           <div style="font-size: var(--font-size-xs); color: #15803D">
-            Closed-loop department recovery status following emergency resolution
+            Closed-loop department recovery status following emergency resolution & load balancing
           </div>
         </div>
         <span class="badge ${recState.status === 'NORMALIZED' ? 'badge-success' : recState.status === 'RECOVERING' ? 'badge-info' : 'badge-danger'}">
-          ${recState.status === 'NORMALIZED' ? 'Recovery: 94% · Normalized' : recState.status === 'RECOVERING' ? 'Recovery: 80% · Recovering' : 'Emergency Active'}
+          ${recState.status === 'NORMALIZED' ? 'Recovery: 94% · Normalized' : recState.status === 'RECOVERING' ? 'Recovery: 88% · Recovering' : 'Emergency Active'}
         </span>
       </div>
 
       <div class="flow-recovery-bar">
-        <div class="flow-recovery-bar-fill" style="width: ${recState.recoveryPercentage || 94}%"></div>
+        <div class="flow-recovery-bar-fill" style="width: ${recState.recoveryPercentage || (isInterventionApplied ? 88 : 45)}%"></div>
       </div>
 
       <div class="grid-3" style="margin-top: var(--space-3); font-size: var(--font-size-xs)">
         <div>Baseline Wait: <strong>${recState.baselineWait || 18} min</strong></div>
         <div>Emergency Peak: <strong style="color: var(--critical)">${recState.peakWait || 31} min</strong></div>
-        <div>Current Recovered Wait: <strong style="color: var(--success)">${recState.currentWait || 20} min</strong></div>
+        <div>Current Recovered Wait: <strong style="color: var(--success)">${recState.currentWait || (isInterventionApplied ? 23 : 31)} min</strong></div>
       </div>
     </div>
+
+    <!-- Intervention Result Box (Displays after applying recommendation) -->
+    ${isInterventionApplied ? `
+      <div class="card animate-fade-in" style="background: #F0FDF4; border: 2px solid #86EFAC; margin-bottom: var(--space-6)">
+        <div class="flex justify-between items-center" style="margin-bottom: var(--space-3)">
+          <div class="flex items-center gap-2">
+            <i class="fas fa-check-circle" style="color: var(--success); font-size: 20px"></i>
+            <div>
+              <h4 style="margin: 0; font-size: var(--font-size-md); color: #14532D">Load Balancing Intervention Active</h4>
+              <div style="font-size: var(--font-size-xs); color: #15803D">3 routine patients successfully redistributed from Dr. Aarav Sharma to Dr. Sunita Mehta</div>
+            </div>
+          </div>
+          <span class="badge badge-success">✓ Applied & Active</span>
+        </div>
+
+        <div class="grid-4" style="gap: var(--space-3); font-size: var(--font-size-xs)">
+          <div class="card-inner-box" style="background: white; margin: 0">
+            <div style="color: var(--text-secondary); text-transform: uppercase; font-size: 10px">Wait Time Reduction</div>
+            <div style="font-size: 20px; font-weight: 800; color: var(--success)">31 min → 23 min</div>
+            <div style="color: var(--text-secondary); font-size: 11px">8 min delay avoided</div>
+          </div>
+          <div class="card-inner-box" style="background: white; margin: 0">
+            <div style="color: var(--text-secondary); text-transform: uppercase; font-size: 10px">Redistributed Patients</div>
+            <div style="font-size: 20px; font-weight: 800; color: var(--primary)">3 Patients</div>
+            <div style="color: var(--text-secondary); font-size: 11px">To Dr. Sunita Mehta</div>
+          </div>
+          <div class="card-inner-box" style="background: white; margin: 0">
+            <div style="color: var(--text-secondary); text-transform: uppercase; font-size: 10px">Notifications Dispatched</div>
+            <div style="font-size: 20px; font-weight: 800; color: var(--teal)">100% Privacy-Safe</div>
+            <div style="color: var(--text-secondary); font-size: 11px">ETAs updated</div>
+          </div>
+          <div class="card-inner-box" style="background: white; margin: 0">
+            <div style="color: var(--text-secondary); text-transform: uppercase; font-size: 10px">Department Recovery</div>
+            <div style="font-size: 20px; font-weight: 800; color: #15803D">88% Recovered</div>
+            <div style="color: var(--text-secondary); font-size: 11px">Stabilizing trend</div>
+          </div>
+        </div>
+      </div>
+    ` : ''}
 
     <!-- Active Emergency Impact Box (Requirement 23) -->
     <div class="card" style="border-left: 4px solid ${impactSummary.activeImpactCases > 0 ? 'var(--critical)' : 'var(--success)'}; margin-bottom: var(--space-6)">
@@ -235,17 +283,31 @@ function renderRecoveryTab(el) {
       <!-- Actionable Smart Recommendations -->
       <div style="margin-top: var(--space-4); border-top: 1px solid var(--border-light); padding-top: var(--space-3)">
         <h4 style="font-size: var(--font-size-sm); margin-bottom: var(--space-3)"><i class="fas fa-magic" style="color: var(--primary)"></i> Actionable Operational Recommendations</h4>
-        ${recommendations.map(rec => `
-          <div class="card-inner-box" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-2)">
-            <div>
-              <strong style="font-size: var(--font-size-sm)">${escapeHtml(rec.title)}</strong>
-              <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 2px">${escapeHtml(rec.description)}</div>
+        ${recommendations.map(rec => {
+          const isApplied = isInterventionApplied || rec.applied;
+          return `
+            <div class="card-inner-box" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-2); background: ${isApplied ? '#F8FAFC' : 'white'}">
+              <div>
+                <strong style="font-size: var(--font-size-sm)">${escapeHtml(rec.title)}</strong>
+                <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 2px">${escapeHtml(rec.description)}</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button class="btn btn-ghost btn-sm" onclick="window._showUniversalWhyDrawer('${rec.id}')">
+                  <i class="fas fa-question-circle"></i> Why?
+                </button>
+                ${isApplied ? `
+                  <button class="btn btn-secondary btn-sm" disabled style="background: #E2E8F0; color: #475569; cursor: not-allowed">
+                    <i class="fas fa-check"></i> Applied
+                  </button>
+                ` : `
+                  <button class="btn btn-primary btn-sm" onclick="window._confirmApplyRecommendation('${rec.id}')">
+                    <i class="fas fa-check"></i> Apply Recommendation
+                  </button>
+                `}
+              </div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="window.HospitalFlow.applyEmergencyRecommendation('${rec.id}')">
-              <i class="fas fa-check"></i> Apply Recommendation
-            </button>
-          </div>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
     </div>
   `;
@@ -387,58 +449,175 @@ function renderSimulatorTab(el) {
 }
 
 // ============================================
-// UNIVERSAL "WHY HOSPITALFLOW AI ACTED?" DRAWER (Requirement 7)
+// CONFIRMATION MODAL FOR APPLYING RECOMMENDATION
 // ============================================
-window._showUniversalWhyDrawer = (topic = 'emergency_redistribution') => {
+window._confirmApplyRecommendation = (recId) => {
   const modalRoot = document.getElementById('flow-modal-root') || document.body;
   modalRoot.innerHTML = `
     <div class="modal-backdrop active">
-      <div class="drawer active animate-slide-in-right" style="max-width: 540px">
+      <div class="modal active" style="max-width: 500px">
+        <div class="modal-header">
+          <h3 class="modal-title" style="color: var(--primary)"><i class="fas fa-random"></i> Authorize Patient Redistribution</h3>
+          <button class="modal-close" onclick="this.closest('.modal-backdrop').remove()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size: var(--font-size-sm); color: var(--text-primary); margin-bottom: var(--space-3)">
+            Are you sure you want to execute this load-balancing intervention?
+          </p>
+          <div class="card-inner-box" style="background: var(--bg-subtle); margin-bottom: var(--space-3); font-size: var(--font-size-xs)">
+            <div>• <strong>3 eligible routine waiting patients</strong> will be transferred from Dr. Aarav Sharma to Dr. Sunita Mehta.</div>
+            <div style="margin-top: 4px">• Emergency patients (P1/P2) and patients already in consultation are protected and will <strong>not</strong> be moved.</div>
+            <div style="margin-top: 4px">• Expected department wait time improves from <strong>31 min → 23 min</strong> (saving ~8 min per patient).</div>
+            <div style="margin-top: 4px">• Privacy-safe delay notices will be automatically dispatched to affected patients.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="this.closest('.modal-backdrop').remove()">Cancel</button>
+          <button class="btn btn-primary" id="btn-confirm-apply-rec">
+            <i class="fas fa-check"></i> Confirm & Execute Redistribution
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  modalRoot.querySelector('#btn-confirm-apply-rec')?.addEventListener('click', () => {
+    modalRoot.innerHTML = '';
+    impactEngine.applyRecommendation(recId);
+    // Re-render current recovery tab
+    const tabContent = document.getElementById('flow-tab-content');
+    if (tabContent) renderRecoveryTab(tabContent);
+  });
+};
+
+// ============================================
+// DATA CONFIDENCE EXPLANATION MODAL
+// ============================================
+window._showDataConfidenceModal = (confidence = 'HIGH') => {
+  const modalRoot = document.getElementById('flow-modal-root') || document.body;
+  modalRoot.innerHTML = `
+    <div class="modal-backdrop active">
+      <div class="modal active" style="max-width: 480px">
+        <div class="modal-header">
+          <h3 class="modal-title"><i class="fas fa-chart-line" style="color: var(--primary)"></i> Predictive Model Confidence: ${confidence}</h3>
+          <button class="modal-close" onclick="this.closest('.modal-backdrop').remove()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="card-inner-box" style="background: var(--bg-subtle); font-size: var(--font-size-xs)">
+            <div style="font-weight: 700; margin-bottom: 4px">Operational Input Factors Used:</div>
+            <div>• Historical consultation velocity (Dr. Sharma: 9.8m avg, Dr. Mehta: 10.2m avg)</div>
+            <div>• Active real-time waiting token queue depth</div>
+            <div>• Dynamic emergency trauma diversion subtraction</div>
+            <div>• No-show probability weighting (historical 4.2%)</div>
+          </div>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: var(--space-3); line-height: 1.4">
+            <i class="fas fa-info-circle"></i> <strong>Disclaimer:</strong> Predictions represent operational queue estimations for administrative resource balancing and do not constitute clinical prognostications.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" onclick="this.closest('.modal-backdrop').remove()">Understood</button>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+// ============================================
+// UNIVERSAL "WHY HOSPITALFLOW AI ACTED?" DRAWER (Requirement 7 & Addition 5)
+// ============================================
+window._showUniversalWhyDrawer = (topic = 'emergency_redistribution') => {
+  const s = appState.get();
+  const isApplied = s.lastInterventionApplied;
+  const modalRoot = document.getElementById('flow-modal-root') || document.body;
+
+  modalRoot.innerHTML = `
+    <div class="modal-backdrop active">
+      <div class="drawer active animate-slide-in-right" style="max-width: 580px">
         <div class="drawer-header">
           <div class="flex items-center gap-2">
-            <i class="fas fa-question-circle" style="color: var(--primary); font-size: 20px"></i>
+            <i class="fas fa-question-circle" style="color: var(--primary); font-size: 22px"></i>
             <div>
               <h3 class="drawer-title">Why HospitalFlow AI Acted?</h3>
-              <div style="font-size: 11px; color: var(--text-secondary)">Explainable AI Decision-Support Breakdown</div>
+              <div style="font-size: 11px; color: var(--text-secondary)">Explainable AI Decision-Support & Closed-Loop Lineage</div>
             </div>
           </div>
           <button class="drawer-close" onclick="this.closest('.modal-backdrop').remove()">&times;</button>
         </div>
 
-        <div class="drawer-body">
-          <div class="why-factor-card" style="margin-bottom: var(--space-4)">
-            <div class="why-step-badge">1. DETECTED</div>
-            <h4 style="margin: 4px 0">P1 Emergency Arrival</h4>
-            <p style="font-size: var(--font-size-xs); color: var(--text-secondary)">Incoming ambulance case with respiratory trauma required immediate specialist attention.</p>
+        <div class="drawer-body" style="padding-bottom: var(--space-6)">
+          <!-- 1. Detected Event -->
+          <div class="why-factor-card" style="margin-bottom: var(--space-3)">
+            <div class="why-step-badge">1. DETECTED EVENT</div>
+            <h4 style="margin: 4px 0">P1 Emergency Arrival (Inbound Ambulance AMB-03)</h4>
+            <p style="font-size: var(--font-size-xs); color: var(--text-secondary)">
+              Incoming trauma patient (Rahul Verma) with acute respiratory distress and severe blood loss required immediate emergency bay triage.
+            </p>
           </div>
 
-          <div class="why-factor-card" style="margin-bottom: var(--space-4)">
-            <div class="why-step-badge">2. CAPACITY IMPACT</div>
-            <h4 style="margin: 4px 0">1 Doctor Diverted · 11 Patients Affected</h4>
-            <p style="font-size: var(--font-size-xs); color: var(--text-secondary)">Dr. Aarav Sharma reassigned to Trauma Bay. Active department physicians reduced from 3 to 2 (-33% capacity).</p>
+          <!-- 2. Operational Impact -->
+          <div class="why-factor-card" style="margin-bottom: var(--space-3)">
+            <div class="why-step-badge">2. OPERATIONAL IMPACT</div>
+            <h4 style="margin: 4px 0">Specialist Diverted · Department Capacity Reduced</h4>
+            <p style="font-size: var(--font-size-xs); color: var(--text-secondary)">
+              Dr. Aarav Sharma reassigned to Trauma Bay 1. General Medicine active physicians reduced from 3 to 2 (-33% operational capacity).
+            </p>
           </div>
 
-          <div class="why-factor-card" style="margin-bottom: var(--space-4)">
-            <div class="why-step-badge">3. PREDICTION</div>
-            <h4 style="margin: 4px 0">Average Wait Surge: 18 min → 31 min</h4>
-            <p style="font-size: var(--font-size-xs); color: var(--text-secondary)">Dynamic ETA engine calculated an immediate 13-minute downstream delay across remaining waiting tokens.</p>
+          <!-- 3. Prediction Engine -->
+          <div class="why-factor-card" style="margin-bottom: var(--space-3)">
+            <div class="why-step-badge">3. PREDICTION ENGINE</div>
+            <h4 style="margin: 4px 0">Average OPD Wait Surge: 18 min → 31 min (+13 min)</h4>
+            <p style="font-size: var(--font-size-xs); color: var(--text-secondary)">
+              Dynamic queue simulation calculated that remaining 11 waiting patients under Dr. Sharma would experience severe delay cascading.
+            </p>
           </div>
 
-          <div class="why-factor-card" style="margin-bottom: var(--space-4)">
+          <!-- 4. AI Recommendation -->
+          <div class="why-factor-card" style="margin-bottom: var(--space-3)">
             <div class="why-step-badge">4. AI RECOMMENDATION</div>
-            <h4 style="margin: 4px 0">Redistribute 3 Eligible Patients to Dr. Sunita Mehta</h4>
+            <h4 style="margin: 4px 0">Redistribute 3 Routine Patients to Dr. Sunita Mehta</h4>
             <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 4px">
-              <strong>Why Dr. Mehta?</strong><br>
-              • Same General Medicine department<br>
-              • Available capacity with lighter queue load<br>
-              • Expected Wait Improvement: <strong>31 min → 23 min</strong> (8 min delay mitigated)
+              <strong>Clinical & Operational Rationale:</strong><br>
+              • Same General Medicine clinical department<br>
+              • Dr. Mehta's queue load is light (1 waiting patient vs Dr. Sharma's 5)<br>
+              • Preserves clinical safety by selecting only routine triage tokens
             </div>
           </div>
 
-          <div class="why-factor-card" style="margin-bottom: var(--space-4); background: #F0FDF4; border-color: #BBF7D0">
-            <div class="why-step-badge" style="background: var(--success); color: white">5. HUMAN-IN-THE-LOOP APPROVAL & RESULT</div>
-            <h4 style="margin: 4px 0; color: #14532D">Admin Approved · Actual Recovered Wait: 24 min</h4>
-            <p style="font-size: var(--font-size-xs); color: #15803D">Patients transferred seamlessly; automated privacy-safe delay notifications delivered.</p>
+          <!-- 5. Expected Result -->
+          <div class="why-factor-card" style="margin-bottom: var(--space-3)">
+            <div class="why-step-badge">5. EXPECTED RESULT</div>
+            <h4 style="margin: 4px 0">Wait Time Reduction: 31 min → 23 min (8 min saved)</h4>
+            <p style="font-size: var(--font-size-xs); color: var(--text-secondary)">
+              Mitigates 61% of the emergency-induced bottleneck and stabilizes downstream patient throughput.
+            </p>
+          </div>
+
+          <!-- 6. Human In The Loop Decision -->
+          <div class="why-factor-card" style="margin-bottom: var(--space-3)">
+            <div class="why-step-badge">6. HUMAN-IN-THE-LOOP AUTHORIZATION</div>
+            <h4 style="margin: 4px 0">Admin Decision: ${isApplied ? 'Approved & Executed' : 'Awaiting Operational Authorization'}</h4>
+            <p style="font-size: var(--font-size-xs); color: var(--text-secondary)">
+              System requires explicit hospital staff confirmation before reallocating patient tokens or altering doctor rosters.
+            </p>
+          </div>
+
+          <!-- 7. Actual Result -->
+          <div class="why-factor-card" style="margin-bottom: var(--space-3); background: #F0FDF4; border-color: #BBF7D0">
+            <div class="why-step-badge" style="background: var(--success); color: white">7. ACTUAL POST-INTERVENTION RESULT</div>
+            <h4 style="margin: 4px 0; color: #14532D">${isApplied ? 'Recovered OPD Wait: 23 min · 3 Patients Moved' : 'Projected Recovered Wait: 23 min'}</h4>
+            <p style="font-size: var(--font-size-xs); color: #15803D">
+              Patients transferred seamlessly in the database; automated privacy-safe delay notifications delivered.
+            </p>
+          </div>
+
+          <!-- 8. Current Flow Recovery State -->
+          <div class="why-factor-card" style="background: #F8FAFC; border-color: var(--border)">
+            <div class="why-step-badge" style="background: var(--primary); color: white">8. CURRENT FLOW RECOVERY STATE</div>
+            <h4 style="margin: 4px 0">${isApplied ? 'Status: RECOVERING (88% Index)' : 'Status: NORMALIZED (94% Index)'}</h4>
+            <p style="font-size: var(--font-size-xs); color: var(--text-secondary)">
+              Department capacity is dynamically monitoring consultation completion velocities until full baseline return.
+            </p>
           </div>
         </div>
 
@@ -449,3 +628,4 @@ window._showUniversalWhyDrawer = (topic = 'emergency_redistribution') => {
     </div>
   `;
 };
+

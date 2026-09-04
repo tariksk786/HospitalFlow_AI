@@ -161,10 +161,15 @@ export function renderDoctorPortal(container, subRoute = 'dashboard') {
 // ============================================
 function renderDoctorDashboard(el, doctor) {
   const s = appState.get();
-  const myQueue = s.queueEntries.filter(q => q.doctorId === doctor.id && ['Waiting', 'Called', 'Consulting'].includes(q.status));
+  const myQueue = s.queueEntries.filter(q => q.doctorId === doctor.id && ['Waiting', 'Called', 'In-Room', 'Consulting'].includes(q.status));
+  
   const consultingEntry = myQueue.find(q => q.status === 'Consulting');
-  const currentPatient = consultingEntry ? s.patients.find(p => p.id === consultingEntry.patientId) : null;
+  const inRoomEntry = myQueue.find(q => q.status === 'In-Room');
+  const calledEntry = myQueue.find(q => q.status === 'Called');
   const waitingQueue = myQueue.filter(q => q.status === 'Waiting');
+
+  const activeEntry = consultingEntry || inRoomEntry || calledEntry;
+  const currentPatient = activeEntry ? s.patients.find(p => p.id === activeEntry.patientId) : null;
   const nextPatient = waitingQueue[0] ? s.patients.find(p => p.id === waitingQueue[0].patientId) : null;
 
   const assignedEmergency = (s.emergencyCases || []).find(c => c.doctorId === doctor.id && c.status !== 'COMPLETED');
@@ -206,44 +211,107 @@ function renderDoctorDashboard(el, doctor) {
           </div>
           <div class="kpi-content">
             <div class="kpi-label">Doctor Status</div>
-            <div class="kpi-value" style="font-size: 18px">${assignedEmergency ? 'Emergency' : doctor.status || 'Available'}</div>
+            <div class="kpi-value" style="font-size: 18px">${assignedEmergency ? 'Emergency Active' : doctor.status || 'Available'}</div>
             <div class="kpi-meta">${assignedEmergency ? 'Trauma bay duty' : 'OPD active'}</div>
           </div>
         </div>
       </div>
 
-      <!-- Current In-Room Patient Hero Card -->
-      <div class="card" style="border: 2px solid ${currentPatient ? 'var(--primary-border)' : 'var(--border)'}; margin-bottom: var(--space-6); background: ${currentPatient ? '#F8FAFC' : 'white'}">
+      <!-- Priority Emergency Alert Hero (if assigned) -->
+      ${assignedEmergency ? `
+        <div class="card" style="border: 2px solid var(--critical-border); background: #FEF2F2; margin-bottom: var(--space-6)">
+          <div class="card-header flex justify-between items-center" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: var(--space-3)">
+            <div>
+              <h3 class="card-title" style="color: #991B1B">
+                <i class="fas fa-exclamation-circle"></i> PRIORITY 1: Active Emergency Assigned (${assignedEmergency.caseId})
+              </h3>
+              <div class="card-subtitle">Urgent triage case assigned to your clinical care</div>
+            </div>
+            <span class="badge badge-danger">${assignedEmergency.priority}</span>
+          </div>
+
+          <div class="flex justify-between items-center" style="margin: var(--space-4) 0; flex-wrap: wrap; gap: var(--space-4)">
+            <div>
+              <h4 style="margin: 0; font-size: 16px">${escapeHtml(assignedEmergency.patientName)}</h4>
+              <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 2px">
+                Department: <strong>${assignedEmergency.department}</strong> · Symptoms: <em>"${escapeHtml(assignedEmergency.symptoms)}"</em>
+              </div>
+            </div>
+
+            <div class="flex gap-2">
+              <button class="btn btn-danger btn-sm" onclick="window.HospitalFlow.startEmergencyConsultation('${assignedEmergency.caseId}')">
+                <i class="fas fa-stethoscope"></i> Start Emergency Consultation
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="alert('Case prioritized as next consultation in queue.')">
+                <i class="fas fa-clock"></i> Assign Next Priority
+              </button>
+              <button class="btn btn-warning btn-sm" onclick="alert('Backup doctor Dr. Sunita Mehta mobilized for assistance.')">
+                <i class="fas fa-user-plus"></i> Choose Backup Doctor
+              </button>
+              <button class="btn btn-success btn-sm" onclick="window.HospitalFlow.completeEmergencyCase('${assignedEmergency.caseId}')">
+                <i class="fas fa-check-circle"></i> Complete Emergency Case
+              </button>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Current In-Room / Called Patient Hero Card -->
+      <div class="card" style="border: 2px solid ${activeEntry ? 'var(--primary-border)' : 'var(--border)'}; margin-bottom: var(--space-6); background: ${activeEntry ? '#F8FAFC' : 'white'}">
         <div class="card-header flex justify-between items-center">
           <div>
-            <h3 class="card-title"><i class="fas fa-stethoscope" style="color: var(--primary)"></i> Current In-Room Patient</h3>
-            <div class="card-subtitle">Active consultation in progress</div>
+            <h3 class="card-title"><i class="fas fa-stethoscope" style="color: var(--primary)"></i> Current Patient Workspace</h3>
+            <div class="card-subtitle">
+              ${consultingEntry ? 'Active consultation in progress' :
+                inRoomEntry ? 'Patient arrived in room · Awaiting consultation start' :
+                calledEntry ? 'Patient called · Awaiting arrival at room door' : 'No patient currently called'}
+            </div>
           </div>
-          <span class="badge ${currentPatient ? 'badge-success' : 'badge-neutral'}">${currentPatient ? 'Consulting Now' : 'Room Empty'}</span>
+          <span class="badge ${consultingEntry ? 'badge-success' : inRoomEntry ? 'badge-info' : calledEntry ? 'badge-warning' : 'badge-neutral'}">
+            ${consultingEntry ? 'Consulting Now' :
+              inRoomEntry ? 'In Room — Awaiting Start' :
+              calledEntry ? 'Called — Awaiting Arrival' : 'Room Empty'}
+          </span>
         </div>
 
-        ${currentPatient ? `
+        ${activeEntry && currentPatient ? `
           <div class="flex justify-between items-center" style="margin: var(--space-4) 0; flex-wrap: wrap; gap: var(--space-4)">
             <div class="flex items-center gap-4">
               <div class="header-user-avatar" style="width: 56px; height: 56px; font-size: 20px">${getInitials(currentPatient.displayName)}</div>
               <div>
                 <h3 style="margin: 0">${escapeHtml(currentPatient.displayName)}</h3>
                 <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 2px">
-                  ID: <strong>${currentPatient.id}</strong> · Token: <strong style="color: var(--primary)">${consultingEntry.id}</strong> · ${currentPatient.age || 29} Yrs / ${currentPatient.gender || 'Male'}
+                  ID: <strong>${currentPatient.id}</strong> · Token: <strong style="color: var(--primary)">${activeEntry.id}</strong> · ${currentPatient.age || 29} Yrs / ${currentPatient.gender || 'Male'} · Blood: <strong style="color: var(--critical)">${currentPatient.bloodGroup || 'O+'}</strong>
                 </div>
               </div>
             </div>
 
             <div class="flex gap-2">
-              <button class="btn btn-secondary btn-sm" onclick="window._showDoctorCarePlanAuthorModal('${currentPatient.id}')">
-                <i class="fas fa-file-medical"></i> Author Care Plan
-              </button>
-              <button class="btn btn-warning btn-sm" onclick="window._showDoctorBloodRequestModal('${currentPatient.id}')">
-                <i class="fas fa-tint"></i> Request Blood
-              </button>
-              <button class="btn btn-success btn-sm" onclick="window.HospitalFlow.completeConsultation('${consultingEntry.id}')">
-                <i class="fas fa-check-circle"></i> Complete Consultation
-              </button>
+              ${calledEntry ? `
+                <button class="btn btn-primary btn-sm" onclick="window.HospitalFlow.flow.markPatientInRoom('${calledEntry.id}'); window.HospitalFlow.router.navigate('/doctor/dashboard')">
+                  <i class="fas fa-door-open"></i> Mark In Room
+                </button>
+                <button class="btn btn-success btn-sm" onclick="window.HospitalFlow.startConsultation('${calledEntry.id}')">
+                  <i class="fas fa-play"></i> Start Consultation
+                </button>
+              ` : inRoomEntry ? `
+                <button class="btn btn-success btn-sm" onclick="window.HospitalFlow.startConsultation('${inRoomEntry.id}')">
+                  <i class="fas fa-play"></i> Start Consultation
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="window._showDoctorCareHistoryDrawer('${currentPatient.id}')">
+                  <i class="fas fa-history"></i> Clinical History
+                </button>
+              ` : `
+                <button class="btn btn-secondary btn-sm" onclick="window._showDoctorCarePlanAuthorModal('${currentPatient.id}')">
+                  <i class="fas fa-file-medical"></i> Author Care Plan
+                </button>
+                <button class="btn btn-warning btn-sm" onclick="window._showDoctorBloodRequestModal('${currentPatient.id}')">
+                  <i class="fas fa-tint"></i> Request Blood
+                </button>
+                <button class="btn btn-success btn-sm" onclick="window.HospitalFlow.completeConsultation('${consultingEntry.id}')">
+                  <i class="fas fa-check-circle"></i> Complete Consultation
+                </button>
+              `}
             </div>
           </div>
         ` : `
@@ -290,7 +358,7 @@ function renderDoctorDashboard(el, doctor) {
                     <td>${formatMinutes(q.estimatedWait || 0)}</td>
                     <td>
                       <button class="btn btn-primary btn-sm" onclick="window.HospitalFlow.callPatient('${q.id}')">
-                        <i class="fas fa-bullhorn"></i> Call
+                        <i class="fas fa-bullhorn"></i> Call Patient
                       </button>
                     </td>
                   </tr>
@@ -324,6 +392,8 @@ function renderDoctorAppointments(el, doctor) {
       <div class="grid-2" style="gap: var(--space-4)">
         ${myApts.map(apt => {
           const pt = s.patients.find(p => p.id === apt.patientId);
+          const queueEntry = s.queueEntries.find(q => q.appointmentId === apt.id || (q.patientId === apt.patientId && ['Waiting', 'Called', 'Consulting'].includes(q.status)));
+          
           return `
             <div class="card" style="border-left: 4px solid var(--primary)">
               <div class="flex justify-between items-center" style="margin-bottom: var(--space-2)">
@@ -334,8 +404,12 @@ function renderDoctorAppointments(el, doctor) {
                 Time: <strong>${formatTime(apt.scheduledTime)}</strong> · Symptoms: <em>"${escapeHtml(apt.symptom_original_text || 'Fever, Cough')}"</em>
               </div>
               <div class="flex gap-2">
-                <button class="btn btn-primary btn-sm" onclick="alert('Calling patient to room...')"><i class="fas fa-bullhorn"></i> Call Patient</button>
-                <button class="btn btn-secondary btn-sm" onclick="window._showDoctorCareHistoryDrawer('${apt.patientId}')"><i class="fas fa-history"></i> Care History</button>
+                <button class="btn btn-primary btn-sm" onclick="window._handleDoctorCallAppointment('${apt.id}')">
+                  <i class="fas fa-bullhorn"></i> Call Patient
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="window._showDoctorCareHistoryDrawer('${apt.patientId}')">
+                  <i class="fas fa-history"></i> Care History
+                </button>
               </div>
             </div>
           `;
@@ -343,6 +417,21 @@ function renderDoctorAppointments(el, doctor) {
       </div>
     </div>
   `;
+
+  window._handleDoctorCallAppointment = (aptId) => {
+    const apt = s.appointments.find(a => a.id === aptId);
+    if (!apt) return;
+    let qEntry = s.queueEntries.find(q => q.appointmentId === aptId || q.patientId === apt.patientId);
+    if (!qEntry) {
+      // Check in patient if not already checked in
+      const res = FlowEngine.checkInPatient(aptId);
+      qEntry = res.queueEntry;
+    }
+    if (qEntry) {
+      FlowEngine.callPatient(qEntry.id);
+      window.HospitalFlow.router.navigate('/doctor/dashboard');
+    }
+  };
 }
 
 // ============================================
@@ -355,7 +444,7 @@ function renderDoctorFollowUps(el, doctor) {
 
   el.innerHTML = `
     <div class="doctor-followups-layout animate-fade-in">
-      <!-- Problem Reports from Home (Requirement 15) -->
+      <!-- Problem Reports from Home (Phase 6) -->
       <div class="card" style="margin-bottom: var(--space-6); border: 2px solid var(--warning-border)">
         <div class="card-header flex justify-between items-center">
           <div>
@@ -367,7 +456,7 @@ function renderDoctorFollowUps(el, doctor) {
 
         <div class="flex flex-col gap-3" style="margin-top: var(--space-3)">
           ${reports.length > 0 ? reports.map(r => `
-            <div class="card-inner-box" style="background: #FFFBEB; border: 1px solid #FDE68A; display: flex; justify-content: space-between; align-items: center">
+            <div class="card-inner-box" style="background: #FFFBEB; border: 1px solid #FDE68A; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-3)">
               <div>
                 <strong style="font-size: var(--font-size-sm)">${escapeHtml(r.patientName || r.patientId)}</strong> · <span class="badge badge-danger">${r.severity}</span>
                 <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 2px">
@@ -376,7 +465,15 @@ function renderDoctorFollowUps(el, doctor) {
               </div>
               <div class="flex gap-2">
                 <a href="tel:+919876543210" class="btn btn-secondary btn-sm"><i class="fas fa-phone-alt"></i> Call</a>
-                <button class="btn btn-primary btn-sm" onclick="alert('Care plan updated with revised medication.')"><i class="fas fa-check"></i> Review & Update</button>
+                <button class="btn btn-warning btn-sm" onclick="window._showDoctorCarePlanAuthorModal('${r.patientId}')">
+                  <i class="fas fa-file-medical"></i> Update Care Plan
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="alert('Priority Follow-Up scheduled for tomorrow morning.'); window.HospitalFlow.router.navigate('/doctor/followups')">
+                  <i class="fas fa-calendar-plus"></i> Schedule Follow-Up
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="alert('Urgent hospital assessment recommendation sent to triage.'); window.HospitalFlow.router.navigate('/doctor/followups')">
+                  <i class="fas fa-hospital"></i> Recommend Urgent Assessment
+                </button>
               </div>
             </div>
           `).join('') : `
@@ -526,7 +623,7 @@ function renderDoctorCarePlans(el, doctor) {
 }
 
 // ============================================
-// 7. DOCTOR PROFILE REDESIGN (Phase 6)
+// 7. DOCTOR PROFILE REDESIGN
 // ============================================
 function renderDoctorProfile(el, doctor) {
   el.innerHTML = `
@@ -630,22 +727,62 @@ window._showDoctorBloodRequestModal = (patientId) => {
   });
 };
 
+// Structured Care Plan Authoring Modal (Phase 7)
 window._showDoctorCarePlanAuthorModal = (patientId) => {
+  const s = appState.get();
+  const pt = s.patients.find(p => p.id === patientId);
   const modalRoot = document.getElementById('doctor-modal-root') || document.body;
+
   modalRoot.innerHTML = `
     <div class="modal-backdrop active">
-      <div class="modal active" style="max-width: 480px">
+      <div class="modal active" style="max-width: 580px">
         <div class="modal-header">
-          <h3 class="modal-title"><i class="fas fa-file-medical"></i> Author Discharge Care Plan</h3>
+          <h3 class="modal-title" style="color: var(--success)"><i class="fas fa-file-medical"></i> Author Structured Discharge Care Plan</h3>
           <button class="modal-close" onclick="this.closest('.modal-backdrop').remove()">&times;</button>
         </div>
         <form id="doc-author-plan-form">
-          <div class="modal-body">
-            <div class="form-group"><label class="form-label">Medications (comma separated)</label><input type="text" id="doc-meds" class="form-input" value="Azithromycin 250mg, Paracetamol 500mg"></div>
-            <div class="form-group"><label class="form-label">Diet & Nutrition Instructions</label><input type="text" id="doc-diet" class="form-input" value="Light fluids, warm water, low sodium"></div>
+          <div class="modal-body" style="max-height: 70vh; overflow-y: auto">
+            <p style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-bottom: var(--space-3)">
+              Authoring recovery & medication continuity for <strong>${escapeHtml(pt?.displayName || patientId)}</strong>
+            </p>
+
+            <div class="form-group">
+              <label class="form-label">Medications (Name, Dosage, TimeSlot, Instructions)</label>
+              <textarea id="doc-meds-structured" class="form-textarea" rows="3" required>Azithromycin 250mg | 1 Tab | Morning | After food
+Paracetamol 650mg | 1 Tab | Afternoon | After lunch
+Pantoprazole 40mg | 1 Tab | Night | 30m before dinner</textarea>
+              <span style="font-size: 10px; color: var(--text-tertiary)">Format: Name | Dose | Morning/Afternoon/Evening/Night | Instructions</span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Diet & Nutrition Instructions <span class="required">*</span></label>
+              <input type="text" id="doc-diet" class="form-input" value="Light fluids, low sodium, warm water hydration" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Warning Signs to Watch</label>
+              <input type="text" id="doc-warnings" class="form-input" value="Fever above 101F, Shortness of breath, Sudden dizziness">
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Follow-Up Date</label>
+                <input type="date" id="doc-followup-date" class="form-input" value="${new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]}">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Recovery Duration (Days)</label>
+                <input type="number" id="doc-recovery-days" class="form-input" value="7" min="1" max="30">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Clinical Doctor Notes</label>
+              <input type="text" id="doc-notes" class="form-input" value="Patient responsive to oral antibiotics. Follow medication schedule strictly.">
+            </div>
           </div>
           <div class="modal-footer">
-            <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Save & Issue Plan</button>
+            <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-backdrop').remove()">Cancel</button>
+            <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Save & Issue Care Plan</button>
           </div>
         </form>
       </div>
@@ -654,23 +791,34 @@ window._showDoctorCarePlanAuthorModal = (patientId) => {
 
   modalRoot.querySelector('#doc-author-plan-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
-    const meds = modalRoot.querySelector('#doc-meds').value.split(',').map((name, i) => ({
-      name: name.trim(),
-      dosage: '1 Tab',
-      timeSlot: i === 0 ? 'Morning' : 'Night',
-      instructions: 'After Food'
-    }));
+    const lines = modalRoot.querySelector('#doc-meds-structured').value.trim().split('\n');
+    const meds = lines.map((line, i) => {
+      const parts = line.split('|').map(p => p.trim());
+      return {
+        name: parts[0] || `Medication ${i + 1}`,
+        dosage: parts[1] || '1 Tab',
+        timeSlot: parts[2] || (i === 0 ? 'Morning' : i === 1 ? 'Afternoon' : 'Night'),
+        instructions: parts[3] || 'After Food'
+      };
+    });
+
     const diet = modalRoot.querySelector('#doc-diet').value;
+    const warnings = modalRoot.querySelector('#doc-warnings').value.split(',').map(w => w.trim());
+    const followUpDate = modalRoot.querySelector('#doc-followup-date').value;
+    const days = parseInt(modalRoot.querySelector('#doc-recovery-days').value, 10) || 7;
 
     CareEngine.createDischargePlan({
       patientId,
       doctorId: 'D-0001',
       medications: meds,
       dietPlan: diet,
-      warningSigns: ['Fever above 101F', 'Persistent breathlessness']
+      warningSigns: warnings,
+      followUpDate: `${followUpDate}T10:00:00`,
+      totalRecoveryDays: days
     });
 
     modalRoot.innerHTML = '';
-    alert('Discharge plan authored and synchronized to patient portal.');
+    alert('Discharge care plan authored and synchronized across Patient, Doctor, and Admin portals.');
+    window.HospitalFlow.router.navigate('/doctor/dashboard');
   });
 };

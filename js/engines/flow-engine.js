@@ -208,7 +208,7 @@ const FlowEngine = {
   callPatient(queueEntryId) {
     const s = appState.get();
     const entry = s.queueEntries.find(q => q.id === queueEntryId);
-    if (!entry || entry.status !== 'Waiting') return;
+    if (!entry) return;
 
     const patient = s.patients.find(p => p.id === entry.patientId);
     const doctor = s.doctors.find(d => d.id === entry.doctorId);
@@ -218,8 +218,17 @@ const FlowEngine = {
       calledAt: new Date().toISOString()
     });
 
+    if (entry.doctorId) {
+      appState.updateItem('doctors', entry.doctorId, {
+        calledPatientId: entry.patientId
+      });
+    }
+
     eventBus.emit(EventTypes.PATIENT_CALLED, {
+      queueEntryId,
+      patientId: entry.patientId,
       patientName: patient?.displayName,
+      doctorId: entry.doctorId,
       doctorName: doctor?.displayName,
       department: entry.department
     }, { source: 'flow-engine', entityId: queueEntryId });
@@ -235,12 +244,53 @@ const FlowEngine = {
   },
 
   /**
+   * Mark patient as arrived inside doctor consultation room
+   */
+  markPatientInRoom(queueEntryId) {
+    const s = appState.get();
+    const entry = s.queueEntries.find(q => q.id === queueEntryId);
+    if (!entry) return;
+
+    const patient = s.patients.find(p => p.id === entry.patientId);
+    const doctor = s.doctors.find(d => d.id === entry.doctorId);
+
+    appState.updateItem('queueEntries', queueEntryId, {
+      status: 'In-Room'
+    });
+
+    if (entry.doctorId) {
+      appState.updateItem('doctors', entry.doctorId, {
+        calledPatientId: entry.patientId,
+        inRoomPatientId: entry.patientId
+      });
+    }
+
+    eventBus.emit(EventTypes.PATIENT_IN_ROOM, {
+      queueEntryId,
+      patientId: entry.patientId,
+      patientName: patient?.displayName,
+      doctorId: entry.doctorId,
+      doctorName: doctor?.displayName,
+      department: entry.department
+    }, { source: 'flow-engine', entityId: queueEntryId });
+
+    NotificationManager.create({
+      type: 'Queue',
+      category: 'Queue',
+      priority: 'Normal',
+      title: 'Patient In Room',
+      message: `${patient?.displayName} has entered Dr. ${doctor?.displayName}'s room`,
+      relatedModule: 'flow'
+    });
+  },
+
+  /**
    * Start consultation
    */
   startConsultation(queueEntryId) {
     const s = appState.get();
     const entry = s.queueEntries.find(q => q.id === queueEntryId);
-    if (!entry || !['Waiting', 'Called'].includes(entry.status)) return;
+    if (!entry || !['Waiting', 'Called', 'In-Room'].includes(entry.status)) return;
 
     const now = new Date().toISOString();
     const patient = s.patients.find(p => p.id === entry.patientId);
@@ -255,7 +305,9 @@ const FlowEngine = {
     // Update doctor status
     appState.updateItem('doctors', entry.doctorId, {
       status: 'Consulting',
-      currentPatientId: entry.patientId
+      currentPatientId: entry.patientId,
+      calledPatientId: null,
+      inRoomPatientId: null
     });
 
     // Update appointment
@@ -299,6 +351,8 @@ const FlowEngine = {
     appState.updateItem('doctors', entry.doctorId, {
       status: 'Available',
       currentPatientId: null,
+      calledPatientId: null,
+      inRoomPatientId: null,
       completedToday: (doctor?.completedToday || 0) + 1,
       queueLoad: Math.max(0, (doctor?.queueLoad || 1) - 1)
     });
@@ -332,6 +386,100 @@ const FlowEngine = {
     appState.recalculateDashboard();
 
     return { patientId: entry.patientId, appointmentId: entry.appointmentId };
+  },
+
+  /**
+   * Create Private Vehicle / Self-Arrival Pre-Arrival Emergency Alert
+   */
+  createPreArrivalEmergency({ patientId, patientName, transportMode = 'Private Vehicle', location, symptoms, severity = 'Critical', etaMinutes = 14, phone, consciousness = 'Conscious', breathingDifficulty = 'None', majorBleeding = 'No', notes = '' }) {
+    const s = appState.get();
+    const patient = s.patients.find(p => p.id === patientId) || {
+      id: patientId || 'P-1001',
+      displayName: patientName || 'Emergency Patient',
+      bloodGroup: 'B+',
+      age: 32,
+      gender: 'Male',
+      phone: phone || '+91 9876543210'
+    };
+
+    const caseId = generateId('PRE-EMG');
+    const now = new Date().toISOString();
+
+    const preArrivalCase = {
+      id: caseId,
+      caseId,
+      patientId: patient.id,
+      patientName: patient.displayName,
+      transportMode, // 'Private Vehicle' or 'Walk-in'
+      location: location || 'Current transit',
+      symptoms,
+      severity,
+      etaMinutes: parseInt(etaMinutes, 10) || 14,
+      phone: phone || patient.phone,
+      triageDetails: {
+        consciousness,
+        breathingDifficulty,
+        majorBleeding,
+        notes
+      },
+      status: 'PREPARING_FOR_ARRIVAL', // 'PREPARING_FOR_ARRIVAL', 'ARRIVED', 'IN_BAY', 'COMPLETED'
+      assignedDoctorId: 'D-0001',
+      assignedDoctorName: 'Dr. Aarav Sharma',
+      assignedBay: 'Trauma Bay 2',
+      createdAt: now
+    };
+
+    // Store in state
+    const preArrivals = s.preArrivalEmergencies || [];
+    appState.update({
+      preArrivalEmergencies: [preArrivalCase, ...preArrivals.filter(p => p.patientId !== patient.id)]
+    });
+
+    // Also register in emergencyCases for clinical oversight
+    const emCase = {
+      id: caseId,
+      caseId,
+      patientId: patient.id,
+      patientName: patient.displayName,
+      doctorId: 'D-0001',
+      doctorName: 'Dr. Aarav Sharma',
+      department: 'Emergency & Trauma',
+      priority: severity === 'Critical' ? 'P1 - Critical Emergency' : 'P2 - Urgent Priority',
+      symptoms: `${symptoms} (Transit: ${transportMode}, ETA ~${etaMinutes}m)`,
+      status: 'PREPARING',
+      createdAt: now,
+      readiness: {
+        bedReady: true,
+        doctorAssigned: true,
+        teamReady: true,
+        bloodReviewed: false
+      }
+    };
+    appState.addItem('emergencyCases', emCase);
+
+    // Emit pre-arrival event
+    eventBus.emit(EventTypes.EMERGENCY_PREARRIVAL_CREATED, {
+      caseId,
+      patientId: patient.id,
+      patientName: patient.displayName,
+      transportMode,
+      etaMinutes,
+      symptoms,
+      severity
+    }, { source: 'flow-engine', entityId: caseId });
+
+    // Trigger proactive alert for Admin and Doctor
+    NotificationManager.create({
+      type: 'Emergency',
+      category: 'Emergency',
+      priority: 'Critical',
+      title: '🚨 Inbound Emergency Pre-Arrival',
+      message: `${patient.displayName} arriving via ${transportMode} in ~${etaMinutes} min (${symptoms})`,
+      relatedModule: 'emergency',
+      relatedEntityId: caseId
+    });
+
+    return preArrivalCase;
   },
 
   /**

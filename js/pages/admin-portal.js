@@ -146,17 +146,38 @@ export function renderAdminPortal(container, subRoute = 'command') {
 
   // Render Sub Route
   const subContentEl = container.querySelector('#admin-sub-content');
-  switch (subRoute) {
-    case 'command': renderDashboard(subContentEl); break;
-    case 'flow': renderFlowPage(subContentEl); break;
-    case 'emergency': renderEmergencyPage(subContentEl); break;
-    case 'care': renderCarePage(subContentEl); break;
-    case 'patients': renderAdminPatientsPage(subContentEl); break;
-    case 'doctors': renderAdminDoctorsPage(subContentEl); break;
-    case 'audit': renderAdminAuditPage(subContentEl); break;
-    case 'demo-simulation': renderDemoSimulation(subContentEl); break;
-    default: renderDashboard(subContentEl); break;
-  }
+  const renderCurrentSubRoute = () => {
+    if (!subContentEl || !document.body.contains(subContentEl)) return;
+    switch (subRoute) {
+      case 'command': renderDashboard(subContentEl); break;
+      case 'flow': renderFlowPage(subContentEl); break;
+      case 'emergency': renderEmergencyPage(subContentEl); break;
+      case 'care': renderCarePage(subContentEl); break;
+      case 'patients': renderAdminPatientsPage(subContentEl); break;
+      case 'doctors': renderAdminDoctorsPage(subContentEl); break;
+      case 'audit': renderAdminAuditPage(subContentEl); break;
+      case 'demo-simulation': renderDemoSimulation(subContentEl); break;
+      default: renderDashboard(subContentEl); break;
+    }
+  };
+
+  renderCurrentSubRoute();
+
+  // Reactive subscription for zero-refresh operational synchronization
+  const unsubscribeState = appState.subscribe(() => {
+    if (['patients', 'doctors'].includes(subRoute)) {
+      renderCurrentSubRoute();
+    }
+  });
+
+  // Auto clean up when container unmounts
+  const observer = new MutationObserver(() => {
+    if (!document.body.contains(container)) {
+      unsubscribeState();
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
 // ============================================

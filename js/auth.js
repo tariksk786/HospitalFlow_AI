@@ -77,56 +77,76 @@ const Auth = {
   /**
    * Patient Self-Registration (forces role = 'patient')
    */
-  async registerPatient({ email, password, displayName, phone, age, gender, bloodGroup }) {
-    if (!email || !displayName) throw new Error('Email and Full Name are required.');
+  async registerPatient({ email, password, displayName, name, phone, age, gender, bloodGroup }) {
+    const cleanEmail = (email || '').toLowerCase().trim();
+    const cleanName = (displayName || name || '').trim();
 
-    // Check if user already exists
-    const existing = this._findUserByEmail(email);
-    if (existing) {
-      throw new Error('An account with this email address already exists.');
+    if (!cleanEmail) {
+      throw new Error('Please enter a valid email address.');
+    }
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(cleanEmail)) {
+      throw new Error('Please enter a valid email address.');
+    }
+    if (!cleanName) {
+      throw new Error('Please enter your full name.');
+    }
+    if (!password || password.length < 4) {
+      throw new Error('Please enter a password with at least 4 characters.');
     }
 
-    const patientSeqId = generateSeqId('P', 1000 + (appState.get().patients.length + 1));
-    const userId = `u-pat-${Date.now()}`;
+    // Check if user already exists
+    const existing = this._findUserByEmail(cleanEmail);
+    if (existing) {
+      throw new Error('An account already exists with this email.');
+    }
 
-    // 1. Create Patient entity
-    const newPatient = {
-      id: patientSeqId,
-      userId: userId,
-      displayName: displayName.trim(),
-      phone: phone || '+91 9800000000',
-      age: parseInt(age) || 30,
-      gender: gender || 'Other',
-      bloodGroup: bloodGroup || 'O+',
-      previousNoShows: 0,
-      registeredAt: new Date().toISOString()
-    };
-    appState.addItem('patients', newPatient);
+    try {
+      const patientSeqId = generateSeqId('P', 1000 + (appState.get().patients.length + 1));
+      const userId = `u-pat-${Date.now()}`;
 
-    // 2. Create User Profile with FORCED role = 'patient'
-    const userProfile = {
-      id: userId,
-      email: email.toLowerCase().trim(),
-      displayName: displayName.trim(),
-      role: 'patient', // STRICT: Cannot be chosen by user
-      accountStatus: 'active',
-      patientId: patientSeqId,
-      doctorId: null,
-      department: null,
-      preferred_language: 'en',
-      createdAt: new Date().toISOString()
-    };
+      // 1. Create Patient entity
+      const newPatient = {
+        id: patientSeqId,
+        userId: userId,
+        displayName: cleanName,
+        phone: phone ? phone.trim() : '+91 9800000000',
+        age: parseInt(age) || 30,
+        gender: gender || 'Other',
+        bloodGroup: bloodGroup || 'O+',
+        previousNoShows: 0,
+        registeredAt: new Date().toISOString()
+      };
+      appState.addItem('patients', newPatient);
 
-    // Save in user directory
-    demoUsers.push(userProfile);
-    this._setCurrentUser(userProfile);
+      // 2. Create User Profile with FORCED role = 'patient'
+      const userProfile = {
+        id: userId,
+        email: cleanEmail,
+        displayName: cleanName,
+        role: 'patient', // STRICT: Cannot be chosen by user
+        accountStatus: 'active',
+        patientId: patientSeqId,
+        doctorId: null,
+        department: null,
+        preferred_language: 'en',
+        createdAt: new Date().toISOString()
+      };
 
-    eventBus.emit(EventTypes.USER_LOGGED_IN, {
-      displayName: userProfile.displayName,
-      role: 'patient'
-    }, { source: 'auth', userId: userProfile.id });
+      // Save in user directory
+      demoUsers.push(userProfile);
+      this._setCurrentUser(userProfile);
 
-    return userProfile;
+      eventBus.emit(EventTypes.USER_LOGGED_IN, {
+        displayName: userProfile.displayName,
+        role: 'patient'
+      }, { source: 'auth', userId: userProfile.id });
+
+      return userProfile;
+    } catch (err) {
+      console.error('Registration processing error:', err);
+      throw new Error('Unable to create your account. Please try again.');
+    }
   },
 
   /**

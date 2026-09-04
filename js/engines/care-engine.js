@@ -141,27 +141,30 @@ const CareEngine = {
   },
 
   /**
-   * Mark medication as taken
+   * Acknowledge medication taken
    */
   acknowledgeMedication(patientId, medicationName, timeSlot) {
     const s = appState.get();
     const patient = s.patients.find(p => p.id === patientId);
-
     const tracking = s.medicationTracking || {};
     if (!tracking[patientId]) {
       tracking[patientId] = { totalDoses: 0, takenDoses: 0, missedDoses: 0, history: [] };
     }
 
+    const nowStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     tracking[patientId].takenDoses++;
+    tracking[patientId].totalDoses++;
     tracking[patientId].history.push({
+      id: generateId('med-take'),
       medication: medicationName,
       timeSlot,
       date: new Date().toISOString(),
       taken: true,
-      takenAt: new Date().toISOString()
+      takenAt: new Date().toISOString(),
+      takenTimeStr: nowStr
     });
 
-    appState.update({ medicationTracking: tracking });
+    appState.update({ medicationTracking: { ...tracking } });
 
     // Update related reminder
     const reminder = s.reminders.find(r =>
@@ -176,17 +179,29 @@ const CareEngine = {
       });
     }
 
-    eventBus.emit(EventTypes.MEDICATION_ACKNOWLEDGED, {
+    eventBus.emit(EventTypes.MEDICATION_TAKEN, {
       patientName: patient?.displayName,
+      patientId,
       medicationName,
-      timeSlot
+      timeSlot,
+      takenAt: nowStr
     }, { source: 'care-engine', entityId: patientId });
+
+    NotificationManager.create({
+      type: 'Care',
+      category: 'Reminder',
+      priority: 'Low',
+      title: 'Medication Taken',
+      message: `${patient?.displayName || 'Patient'} confirmed ${timeSlot} dose of ${medicationName} at ${nowStr}`,
+      relatedModule: 'care',
+      relatedEntityId: patientId
+    });
   },
 
   /**
-   * Mark medication as missed
+   * Record medication as skipped with reason
    */
-  markMedicationMissed(patientId, medicationName, timeSlot) {
+  recordSkippedMedication(patientId, medicationName, timeSlot, reason = 'Forgot') {
     const s = appState.get();
     const patient = s.patients.find(p => p.id === patientId);
 
@@ -195,32 +210,47 @@ const CareEngine = {
       tracking[patientId] = { totalDoses: 0, takenDoses: 0, missedDoses: 0, history: [] };
     }
 
+    const nowStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     tracking[patientId].missedDoses++;
+    tracking[patientId].totalDoses++;
     tracking[patientId].history.push({
+      id: generateId('med-skip'),
       medication: medicationName,
       timeSlot,
       date: new Date().toISOString(),
       taken: false,
-      takenAt: null
+      skipped: true,
+      reason,
+      takenAt: null,
+      timestamp: nowStr
     });
 
-    appState.update({ medicationTracking: tracking });
+    appState.update({ medicationTracking: { ...tracking } });
 
     eventBus.emit(EventTypes.MEDICATION_MISSED, {
       patientName: patient?.displayName,
+      patientId,
       medicationName,
-      timeSlot
+      timeSlot,
+      reason
     }, { source: 'care-engine', entityId: patientId });
 
     NotificationManager.create({
       type: 'Care',
       category: 'Reminder',
       priority: 'Medium',
-      title: 'Medication Missed',
-      message: `${patient?.displayName} missed ${timeSlot} dose of ${medicationName}`,
+      title: 'Medication Skipped',
+      message: `${patient?.displayName || 'Patient'} recorded skipped ${timeSlot} dose of ${medicationName} (${reason})`,
       relatedModule: 'care',
       relatedEntityId: patientId
     });
+  },
+
+  /**
+   * Mark medication as missed
+   */
+  markMedicationMissed(patientId, medicationName, timeSlot) {
+    this.recordSkippedMedication(patientId, medicationName, timeSlot, 'Forgot / Missed');
   },
 
   /**

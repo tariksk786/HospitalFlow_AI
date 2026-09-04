@@ -11,11 +11,17 @@ class EmergencyAlertManager {
   constructor() {
     this.audioContext = null;
     this.audioInitialized = false;
+    this.isMuted = false;
     this.escalationTimers = new Map();
     this.escalationThresholdMs = 30000; // 30 seconds
 
     this._initListeners();
     this._bindAudioInitializer();
+  }
+
+  toggleMute() {
+    this.isMuted = !this.isMuted;
+    return this.isMuted;
   }
 
   /**
@@ -49,6 +55,7 @@ class EmergencyAlertManager {
    * 1. Critical Emergency Tone (Urgent 1.5s harmonic chime)
    */
   playEmergencyChime(priority = 'P1') {
+    if (this.isMuted) return;
     try {
       if (!this.audioContext) {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -95,6 +102,7 @@ class EmergencyAlertManager {
    * 2. Ambulance Dispatch Tone (1.4s alert chime)
    */
   playAmbulanceChime() {
+    if (this.isMuted) return;
     try {
       if (!this.audioContext) {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -132,6 +140,7 @@ class EmergencyAlertManager {
    * 3. Critical Blood Request Tone (1.0s distinctive bell)
    */
   playCriticalBloodChime() {
+    if (this.isMuted) return;
     try {
       if (!this.audioContext) {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -168,6 +177,7 @@ class EmergencyAlertManager {
    * Voice Alert using Web Speech API (Clean, professional, non-repeating)
    */
   speakAlert(text) {
+    if (this.isMuted) return;
     if ('speechSynthesis' in window) {
       try {
         window.speechSynthesis.cancel(); // Cancel any existing queue
@@ -207,6 +217,31 @@ class EmergencyAlertManager {
       this.playAmbulanceChime();
       setTimeout(() => {
         this.speakAlert('Emergency ambulance request received. Immediate dispatch attention required.');
+      }, 400);
+    });
+
+    // 1b. Patient arrives by Private Vehicle -> Alert Admin & Doctor
+    eventBus.on(EventTypes.EMERGENCY_PREARRIVAL_CREATED, (event) => {
+      const payload = event.payload;
+      this.createAlert({
+        targetRole: 'admin',
+        title: `🚨 Pre-Arrival: ${payload.patientName || 'Emergency Patient'} (${payload.transportMode || 'Private Vehicle'})`,
+        message: `Expected arrival: ~${payload.estimatedArrivalMinutes || 15} min. Severity: ${payload.severity || 'Critical'}. Symptoms: ${payload.symptoms}`,
+        severity: payload.severity === 'Critical' ? 'CRITICAL' : 'WARNING',
+        priority: payload.severity === 'Critical' ? 'P1' : 'P2',
+        category: 'emergency_prearrival',
+        metadata: {
+          requestId: payload.requestId,
+          transportMode: payload.transportMode,
+          patientName: payload.patientName,
+          symptoms: payload.symptoms,
+          estimatedArrivalMinutes: payload.estimatedArrivalMinutes
+        }
+      });
+
+      this.playEmergencyChime(payload.severity === 'Critical' ? 'P1' : 'P2');
+      setTimeout(() => {
+        this.speakAlert('Emergency pre-arrival alert. Private vehicle arriving.');
       }, 400);
     });
 
