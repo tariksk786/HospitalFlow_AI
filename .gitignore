@@ -6,5 +6,9 @@ Thumbs.db
 .idea/
 dist/
 build/
+.env
+.env.*
 .env.local
 .env.*.local
+*.pem
+*.key
