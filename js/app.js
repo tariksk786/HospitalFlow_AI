@@ -23,6 +23,7 @@ import SimulationEngine from './engines/simulation-engine.js';
 import PredictionEngine from './engines/prediction-engine.js';
 import alertManager from './engines/emergency-alert-manager.js';
 import impactEngine from './engines/emergency-impact-engine.js';
+import SupabaseSync from './engines/supabase-sync.js';
 
 // ============================================
 // GLOBAL API (window.HospitalFlow)
@@ -42,6 +43,7 @@ const HospitalFlow = {
   prediction: PredictionEngine,
   alerts: alertManager,
   impact: impactEngine,
+  sync: SupabaseSync,
 
   // Direct logout alias
   logout() {
@@ -132,6 +134,16 @@ const HospitalFlow = {
     if (banner) banner.remove();
   },
 
+  assignEmergencyDoctor(caseId, doctorId, options = {}) {
+    try {
+      FlowEngine.assignEmergencyDoctor(caseId, doctorId, options);
+      const user = Auth.getCurrentUser();
+      Router.navigate(user?.role === 'doctor' ? '/doctor/queue' : '/admin/emergency');
+    } catch (err) {
+      alert(`Assignment failed: ${err.message}`);
+    }
+  },
+
   startEmergencyConsultation(caseId) {
     const s = appState.get();
     const emCase = s.emergencyCases.find(c => c.id === caseId || c.caseId === caseId);
@@ -145,7 +157,11 @@ const HospitalFlow = {
   },
 
   completeEmergencyCase(caseId) {
-    impactEngine.completeEmergencyCase(caseId);
+    try {
+      FlowEngine.completeEmergencyCase(caseId);
+    } catch {
+      impactEngine.completeEmergencyCase(caseId);
+    }
     alert('Emergency case completed. Doctor capacity restored and queue entering recovery.');
     const user = Auth.getCurrentUser();
     Router.navigate(user?.role === 'doctor' ? '/doctor/dashboard' : '/admin/emergency');
@@ -261,7 +277,10 @@ async function bootstrap() {
   // 4. Initialize Authentication
   await Auth.init();
 
-  // 5. Initialize Router
+  // 5. Initialize Supabase Realtime Synchronization
+  await SupabaseSync.init();
+
+  // 6. Initialize Router
   Router.init();
 }
 

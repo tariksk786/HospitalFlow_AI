@@ -185,6 +185,7 @@ export function renderAdminPortal(container, subRoute = 'command') {
 // ============================================
 function renderAdminPatientsPage(el) {
   const s = appState.get();
+  const emergencyCases = (s.emergencyCases || []).filter(c => c.status !== 'COMPLETED');
 
   let patientsList = [...s.patients];
 
@@ -211,6 +212,42 @@ function renderAdminPatientsPage(el) {
 
   el.innerHTML = `
     <div class="admin-patients-layout animate-fade-in">
+      <!-- Dedicated Emergency / Priority Patients Section (Requirement 12 & 13) -->
+      ${emergencyCases.length > 0 ? `
+        <div class="card" style="border-left: 4px solid var(--critical); margin-bottom: var(--space-6); background: #FFF5F5">
+          <div class="card-header flex justify-between items-center" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: var(--space-3)">
+            <div>
+              <h3 class="card-title" style="color: #991B1B"><i class="fas fa-heartbeat"></i> Emergency & Priority Patients (${emergencyCases.length})</h3>
+              <div class="card-subtitle" style="color: #B91C1C">High priority trauma & emergency cases requiring active physician supervision</div>
+            </div>
+            <span class="badge badge-danger">CRITICAL PRIORITY</span>
+          </div>
+          <div class="grid-2" style="gap: var(--space-3); margin-top: var(--space-4)">
+            ${emergencyCases.map(ec => `
+              <div class="card-inner-box" style="background: white; border: 1px solid rgba(239, 68, 68, 0.3); margin: 0">
+                <div class="flex justify-between items-start">
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="badge badge-danger">${ec.priority || 'P1 CRITICAL'}</span>
+                      <strong style="font-size: var(--font-size-md)">${escapeHtml(ec.patientName)}</strong>
+                      <span style="font-size: 11px; color: var(--text-secondary)">(${ec.patientId || ec.caseId})</span>
+                    </div>
+                    <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 4px; line-height: 1.6">
+                      Assigned Doctor: <strong>Dr. ${escapeHtml(ec.doctorName || 'Awaiting Assignment')}</strong><br>
+                      Transport: <strong>${escapeHtml(ec.transportMode || 'Ambulance')}</strong> · ETA: <strong style="color: var(--critical)">${ec.etaMinutes ? `${ec.etaMinutes} min` : 'In Trauma Bay'}</strong><br>
+                      Status: <strong class="badge ${ec.doctorId ? 'badge-success' : 'badge-warning'}" style="font-size: 10px">${escapeHtml(ec.status || 'Incoming')}</strong>
+                    </div>
+                  </div>
+                  <button class="btn btn-danger btn-sm" onclick="window.HospitalFlow.router.navigate('/admin/emergency')">
+                    <i class="fas fa-shield-alt"></i> Manage
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
       <!-- Filter and Action Bar -->
       <div class="card" style="margin-bottom: var(--space-4); padding: var(--space-4)">
         <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: var(--space-3)">
@@ -240,7 +277,6 @@ function renderAdminPatientsPage(el) {
           const apt = s.appointments.find(a => a.patientId === p.id && a.status === 'Scheduled');
           const queue = s.queueEntries.find(q => q.patientId === p.id && ['Waiting', 'Called', 'Consulting'].includes(q.status));
           const doc = apt ? s.doctors.find(d => d.id === apt.doctorId) : (queue ? s.doctors.find(d => d.id === queue.doctorId) : null);
-          const carePlan = s.dischargePlans.find(dp => dp.patientId === p.id && dp.active);
 
           return `
             <div class="card live-patient-card animate-fade-in" style="border-left: 4px solid var(--${journey.variant === 'danger' ? 'critical' : journey.variant === 'warning' ? 'warning' : journey.variant === 'success' ? 'success' : 'primary'})">
@@ -333,14 +369,17 @@ function renderAdminDoctorsPage(el) {
         </div>
       </div>
 
-      <!-- Live Doctor Operational Cards Grid (Requirement 5, 6, 28) -->
+      <!-- Live Doctor Operational Cards Grid (Requirement 5, 6, 14, 28) -->
       <div class="grid-2" style="gap: var(--space-4)">
         ${docsList.map(doc => {
           const op = appState.getDoctorOperationalState(doc.id);
           const currentPatient = op?.currentPatient;
+          const assignedEm = (s.emergencyCases || []).find(c => c.doctorId === doc.id && c.status !== 'COMPLETED');
+          const waitingRoutine = s.queueEntries.filter(q => q.doctorId === doc.id && q.status === 'Waiting' && !q.priority?.includes('Emergency') && !q.priority?.includes('P1'));
+          const nextRoutine = waitingRoutine[0] ? (s.patients.find(p => p.id === waitingRoutine[0].patientId) || { displayName: waitingRoutine[0].patientId }) : null;
 
           return `
-            <div class="card live-doctor-card animate-fade-in" style="border-left: 4px solid var(--${op.statusVariant === 'danger' ? 'critical' : op.statusVariant === 'success' ? 'success' : op.statusVariant === 'primary' ? 'primary' : 'warning'})">
+            <div class="card live-doctor-card animate-fade-in" style="border-left: 4px solid var(--${assignedEm ? 'critical' : op.statusVariant === 'danger' ? 'critical' : op.statusVariant === 'success' ? 'success' : op.statusVariant === 'primary' ? 'primary' : 'warning'})">
               <div class="flex justify-between items-start" style="margin-bottom: var(--space-3)">
                 <div class="flex items-center gap-3">
                   <div class="header-user-avatar" style="width: 44px; height: 44px; background: #F0FDF4; color: #16A34A; font-size: 16px">${getInitials(doc.displayName)}</div>
@@ -351,38 +390,56 @@ function renderAdminDoctorsPage(el) {
                     </div>
                   </div>
                 </div>
-                <span class="badge badge-${op.statusVariant}">${op.operationalStatus}</span>
+                <span class="badge ${assignedEm ? 'badge-danger' : `badge-${op.statusVariant}`}">
+                  ${assignedEm ? (doc.status === 'EMERGENCY_ACTIVE' ? 'EMERGENCY_ACTIVE' : 'EMERGENCY_ASSIGNED') : op.operationalStatus}
+                </span>
               </div>
 
-              <!-- Current Patient In-Room Hero Box (Requirement 3 & 6) -->
-              <div class="card-inner-box" style="background: ${currentPatient ? '#F0FDF4' : 'var(--bg-subtle)'}; border: 1px solid ${currentPatient ? '#BBF7D0' : 'var(--border)'}; margin: var(--space-3) 0">
-                <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 2px">Current Patient in Room:</div>
-                ${currentPatient ? `
-                  <div style="font-weight: 700; font-size: var(--font-size-sm); color: #14532D">
-                    ${escapeHtml(currentPatient.displayName)} (Token: ${op.consultingEntry?.id || 'GM-18'})
+              <!-- Active Emergency Case Hero Box (Requirement 14) -->
+              ${assignedEm ? `
+                <div class="card-inner-box" style="background: #FEF2F2; border: 1px solid #FECACA; margin: var(--space-3) 0">
+                  <div class="flex justify-between items-center" style="margin-bottom: 2px">
+                    <strong style="color: #991B1B; font-size: var(--font-size-xs)"><i class="fas fa-heartbeat"></i> Current Emergency:</strong>
+                    <span class="badge badge-danger" style="font-size: 10px">${assignedEm.priority || 'P1'}</span>
                   </div>
-                  <div style="font-size: 11px; color: #15803D; margin-top: 2px">
-                    Consultation Started: 10:48 AM · Duration: <strong>08 min</strong>
+                  <div style="font-weight: 700; font-size: var(--font-size-sm); color: #7F1D1D">
+                    ${escapeHtml(assignedEm.patientName)} (${assignedEm.caseId})
                   </div>
-                ` : `
-                  <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">No patient currently in room · Next: <strong>${op.nextPatient ? op.nextPatient.displayName : 'Queue empty'}</strong></div>
-                `}
-              </div>
+                  <div style="font-size: 11px; color: #991B1B; margin-top: 2px">
+                    Symptoms: "${escapeHtml(assignedEm.symptoms || 'Breathing Difficulty')}" · Next Routine: <strong>${nextRoutine ? nextRoutine.displayName : 'None'}</strong>
+                  </div>
+                </div>
+              ` : `
+                <!-- Current Patient In-Room Hero Box -->
+                <div class="card-inner-box" style="background: ${currentPatient ? '#F0FDF4' : 'var(--bg-subtle)'}; border: 1px solid ${currentPatient ? '#BBF7D0' : 'var(--border)'}; margin: var(--space-3) 0">
+                  <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 2px">Current Patient in Room:</div>
+                  ${currentPatient ? `
+                    <div style="font-weight: 700; font-size: var(--font-size-sm); color: #14532D">
+                      ${escapeHtml(currentPatient.displayName)} (Token: ${op.consultingEntry?.id || 'GM-18'})
+                    </div>
+                    <div style="font-size: 11px; color: #15803D; margin-top: 2px">
+                      Next in Queue: <strong>${op.nextPatient ? op.nextPatient.displayName : 'Queue empty'}</strong>
+                    </div>
+                  ` : `
+                    <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">No patient in room · Next: <strong>${op.nextPatient ? op.nextPatient.displayName : 'Queue empty'}</strong></div>
+                  `}
+                </div>
+              `}
 
               <!-- Workload Progress Bar -->
               <div style="margin: var(--space-3) 0">
                 <div class="flex justify-between" style="font-size: 11px; margin-bottom: 4px">
-                  <span>Operational Load: <strong>${op.loadPercentage}%</strong></span>
-                  <span>Waiting in Queue: <strong>${op.waitingCount} patients</strong></span>
+                  <span>Operational Load: <strong>${assignedEm ? Math.min(100, op.loadPercentage + 35) : op.loadPercentage}%</strong></span>
+                  <span>Normal Waiting: <strong>${waitingRoutine.length} patients</strong></span>
                 </div>
                 <div class="progress-bar-track">
-                  <div class="progress-bar-fill ${op.loadVariant}" style="width: ${op.loadPercentage}%"></div>
+                  <div class="progress-bar-fill ${assignedEm ? 'red' : op.loadVariant}" style="width: ${assignedEm ? Math.min(100, op.loadPercentage + 35) : op.loadPercentage}%"></div>
                 </div>
               </div>
 
               <div class="flex justify-between" style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-bottom: var(--space-3)">
                 <span>Completed Today: <strong>${op.completedToday}</strong></span>
-                <span>Avg Consult: <strong>${op.avgConsultation} min</strong></span>
+                <span>Next Routine: <strong>${nextRoutine ? nextRoutine.displayName : 'Queue Clear'}</strong></span>
               </div>
 
               <!-- Action Bar -->

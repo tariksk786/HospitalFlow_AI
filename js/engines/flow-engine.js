@@ -941,6 +941,399 @@ const FlowEngine = {
     return slots;
   },
 
+  /**
+   * Rank and recommend suitable doctors for an emergency case
+   * Considers Department Match (35%), Specialization (20%), Availability (20%), Queue Depth (15%), and Emergency Load (10%)
+   */
+  getRecommendedDoctorsForEmergency(emergencyCase) {
+    const s = appState.get();
+    const emDept = emergencyCase?.department || 'General Medicine';
+
+    const ranked = s.doctors.map(doc => {
+      let score = 0;
+      const reasons = [];
+
+      // 1. Department Match (Weight 35)
+      if (doc.department === emDept) {
+        score += 35;
+        reasons.push(`Direct department match (${doc.department})`);
+      } else if (doc.department === 'General Medicine') {
+        score += 25;
+        reasons.push('General Medicine (Cross-triage capable)');
+      } else {
+        score += 10;
+      }
+
+      // 2. Clinical Specialization (Weight 20)
+      const spec = (doc.specialty || '').toLowerCase();
+      if (spec.includes('trauma') || spec.includes('emergency') || spec.includes('internal') || spec.includes('cardiology') || spec.includes('interventional')) {
+        score += 20;
+        reasons.push(`Specialty match: ${doc.specialty}`);
+      } else {
+        score += 10;
+      }
+
+      // 3. Current Availability & Status (Weight 20)
+      if (doc.status === 'Available') {
+        score += 20;
+        reasons.push('Currently available (Immediate triage readiness)');
+      } else if (doc.status === 'Consulting') {
+        score += 10;
+        reasons.push('Currently consulting (Next priority slot)');
+      } else if (doc.status === 'EMERGENCY_ASSIGNED' || doc.status === 'EMERGENCY_ACTIVE') {
+        score += 2;
+        reasons.push('Active emergency in progress');
+      } else {
+        score -= 15;
+      }
+
+      // 4. Current Queue Length (Weight 15)
+      const queueLen = doc.queueLoad || 0;
+      if (queueLen <= 2) {
+        score += 15;
+        reasons.push(`Low queue depth (${queueLen} waiting)`);
+      } else if (queueLen <= 4) {
+        score += 10;
+        reasons.push(`Moderate queue (${queueLen} waiting)`);
+      } else {
+        score += 4;
+        reasons.push(`High queue load (${queueLen} waiting)`);
+      }
+
+      // 5. Emergency Load (Weight 10)
+      const activeEmCases = (s.emergencyCases || []).filter(c => c.doctorId === doc.id && c.status !== 'COMPLETED').length;
+      if (activeEmCases === 0) {
+        score += 10;
+        reasons.push('Zero active emergency cases');
+      } else if (activeEmCases === 1) {
+        score += 0;
+      } else {
+        score -= 15;
+      }
+
+      // Operational Load %
+      const loadPercentage = Math.min(100, Math.max(10, Math.round((queueLen * 12) + (doc.status === 'EMERGENCY_ACTIVE' ? 45 : doc.status === 'Consulting' ? 25 : 10))));
+
+      return {
+        doctor: doc,
+        doctorId: doc.id,
+        displayName: doc.displayName,
+        department: doc.department,
+        specialty: doc.specialty,
+        status: doc.status,
+        queueLoad: queueLen,
+        loadPercentage,
+        suitabilityScore: Math.max(10, Math.min(100, score)),
+        reasons,
+        isRecommended: false
+      };
+    });
+
+    // Sort by suitability score descending
+    ranked.sort((a, b) => b.suitabilityScore - a.suitabilityScore);
+    if (ranked.length > 0) {
+      ranked[0].isRecommended = true;
+    }
+
+    return ranked;
+  },
+
+  /**
+   * Assign Emergency Doctor and dynamically recalculate queues & ETAs
+   */
+  assignEmergencyDoctor(caseId, doctorId, options = {}) {
+    const s = appState.get();
+    const emCase = (s.emergencyCases || []).find(c => c.caseId === caseId || c.id === caseId);
+    const doctor = s.doctors.find(d => d.id === doctorId);
+
+    if (!emCase) throw new Error(`Emergency case ${caseId} not found`);
+    if (!doctor) throw new Error(`Doctor ${doctorId} not found`);
+
+    const assignedBy = options.assignedBy || s.currentUser?.displayName || 'Admin Operations';
+    const strategy = options.strategy || (doctor.status === 'Consulting' ? 'ASSIGN_NEXT' : 'IMMEDIATE');
+
+    // 1. Update Emergency Case State in Shared Store
+    const updatedCase = {
+      ...emCase,
+      doctorId: doctor.id,
+      doctorName: doctor.displayName,
+      department: doctor.department,
+      status: 'EMERGENCY_ASSIGNED',
+      assignedAt: new Date().toISOString(),
+      assignedBy,
+      priority: emCase.priority || 'P1 - Critical Emergency'
+    };
+    appState.updateItem('emergencyCases', emCase.id, updatedCase);
+
+    // 2. Insert Emergency Token at Position #1 of Doctor's Queue
+    const emergencyTokenId = emCase.caseId || `E-${Date.now().toString().slice(-4)}`;
+    
+    // Check if token already in queue
+    let queueEntry = s.queueEntries.find(q => q.id === emergencyTokenId || q.appointmentId === emCase.id);
+    if (!queueEntry) {
+      queueEntry = {
+        id: emergencyTokenId,
+        patientId: emCase.patientId || 'P-1084',
+        doctorId: doctor.id,
+        department: doctor.department,
+        appointmentId: emCase.id,
+        position: 1,
+        status: strategy === 'DIVERSION' ? 'Consulting' : 'Waiting',
+        priority: emCase.priority || 'P1 - Critical Emergency',
+        estimatedWait: 0,
+        enteredAt: new Date().toISOString(),
+        calledAt: strategy === 'DIVERSION' ? new Date().toISOString() : null,
+        consultingAt: strategy === 'DIVERSION' ? new Date().toISOString() : null,
+        completedAt: null
+      };
+      appState.addItem('queueEntries', queueEntry);
+    } else {
+      appState.updateItem('queueEntries', queueEntry.id, {
+        doctorId: doctor.id,
+        department: doctor.department,
+        position: 1,
+        priority: emCase.priority || 'P1 - Critical Emergency',
+        status: strategy === 'DIVERSION' ? 'Consulting' : 'Waiting'
+      });
+    }
+
+    // 3. Shift all routine waiting patients in this doctor's queue by +1 position and add estimated delay (+9 min)
+    const affectedRoutineEntries = s.queueEntries.filter(q =>
+      q.doctorId === doctor.id &&
+      q.id !== emergencyTokenId &&
+      ['Waiting', 'Called'].includes(q.status) &&
+      !q.priority?.includes('Emergency') &&
+      !q.priority?.includes('P1')
+    );
+
+    affectedRoutineEntries.forEach(routineEntry => {
+      const newPos = routineEntry.position + 1;
+      const newWait = (routineEntry.estimatedWait || 0) + (doctor.averageConsultationMinutes || 9);
+      appState.updateItem('queueEntries', routineEntry.id, {
+        position: newPos,
+        estimatedWait: newWait
+      });
+    });
+
+    // 4. Update Doctor State
+    const newDocStatus = strategy === 'DIVERSION' ? 'EMERGENCY_ACTIVE' : 'EMERGENCY_ASSIGNED';
+    appState.updateItem('doctors', doctor.id, {
+      status: newDocStatus,
+      queueLoad: (doctor.queueLoad || 0) + 1,
+      currentEmergencyCaseId: emCase.caseId
+    });
+
+    // 5. Emit Domain Event across portals
+    eventBus.emit(EventTypes.EMERGENCY_CASE_ASSIGNED, {
+      caseId: emCase.caseId || emCase.id,
+      patientId: emCase.patientId,
+      patientName: emCase.patientName,
+      doctorId: doctor.id,
+      doctorName: doctor.displayName,
+      department: doctor.department,
+      priority: emCase.priority || 'P1 - Critical Emergency',
+      symptoms: emCase.symptoms,
+      etaMinutes: emCase.etaMinutes || 0,
+      transportMode: emCase.transportMode,
+      assignedBy,
+      affectedPatientsCount: affectedRoutineEntries.length
+    }, { source: 'flow-engine', entityId: emCase.id });
+
+    // 6. Recalculate Department Queue ETAs
+    PredictionEngine.recalculateQueueETAs(doctor.department);
+    appState.recalculateDashboard();
+
+    return { emergencyCase: updatedCase, doctor, queueEntry, affectedPatientsCount: affectedRoutineEntries.length };
+  },
+
+  /**
+   * Complete an Emergency Case and Trigger Flow Recovery
+   */
+  completeEmergencyCase(caseId) {
+    const s = appState.get();
+    const emCase = (s.emergencyCases || []).find(c => c.caseId === caseId || c.id === caseId);
+    if (!emCase) return;
+
+    // 1. Update Emergency Case
+    appState.updateItem('emergencyCases', emCase.id, {
+      status: 'COMPLETED',
+      completedAt: new Date().toISOString()
+    });
+
+    // 2. Mark queue token completed
+    const qEntry = s.queueEntries.find(q => q.id === emCase.caseId || q.appointmentId === emCase.id);
+    if (qEntry) {
+      appState.updateItem('queueEntries', qEntry.id, {
+        status: 'Completed',
+        completedAt: new Date().toISOString()
+      });
+    }
+
+    // 3. Restore Doctor Capacity
+    if (emCase.doctorId) {
+      const doc = s.doctors.find(d => d.id === emCase.doctorId);
+      const remainingQueue = s.queueEntries.filter(q => q.doctorId === emCase.doctorId && q.status === 'Waiting');
+      const nextDocStatus = 'Available';
+
+      appState.updateItem('doctors', emCase.doctorId, {
+        status: nextDocStatus,
+        queueLoad: Math.max(0, (doc?.queueLoad || 1) - 1),
+        currentEmergencyCaseId: null
+      });
+
+      // Recalculate queue positions for waiting routine patients
+      remainingQueue.forEach((q, idx) => {
+        appState.updateItem('queueEntries', q.id, {
+          position: idx + 1,
+          estimatedWait: Math.max(5, (idx + 1) * (doc?.averageConsultationMinutes || 9))
+        });
+      });
+    }
+
+    // 4. Update Flow Recovery State in central state
+    const recoveryState = s.flowRecoveryState || {};
+    const dept = emCase.department || 'General Medicine';
+    recoveryState[dept] = {
+      department: dept,
+      status: 'NORMALIZED',
+      baselineWait: 18,
+      peakWait: 34,
+      currentWait: 21,
+      recoveryPercentage: 100,
+      affectedPatientsCount: 0,
+      doctorCapacity: '100% Restored',
+      lastNormalizedAt: new Date().toISOString()
+    };
+    appState.update({ flowRecoveryState: { ...recoveryState } });
+
+    // 5. Emit Completion Event
+    eventBus.emit(EventTypes.EMERGENCY_CASE_COMPLETED, {
+      caseId: emCase.caseId || emCase.id,
+      patientName: emCase.patientName,
+      doctorId: emCase.doctorId,
+      doctorName: emCase.doctorName,
+      department: dept
+    }, { source: 'flow-engine', entityId: emCase.id });
+
+    // 6. Recalculate Department Queue ETAs
+    PredictionEngine.recalculateQueueETAs(dept);
+    appState.recalculateDashboard();
+  },
+
+  /**
+   * Create an incoming pre-arrival emergency (Self-arrival / Private vehicle)
+   */
+  createPreArrivalEmergency({ patientId, patientName, department = 'General Medicine', symptoms, transportMode = 'Private Vehicle', etaMinutes = 10, severity = 'Critical', priority = 'P1 - Critical Emergency', contactNumber }) {
+    const caseId = `E-${Date.now().toString().slice(-4)}`;
+    const newCase = {
+      id: generateId('EM'),
+      caseId,
+      patientId: patientId || `P-${Date.now().toString().slice(-4)}`,
+      patientName: patientName || 'Emergency Patient',
+      department,
+      symptoms,
+      transportMode,
+      etaMinutes,
+      severity,
+      priority,
+      contactNumber: contactNumber || '+91 9876543210',
+      status: 'AWAITING_DOCTOR',
+      doctorId: null,
+      doctorName: null,
+      createdAt: new Date().toISOString()
+    };
+
+    appState.addItem('emergencyCases', newCase);
+
+    eventBus.emit(EventTypes.EMERGENCY_PREARRIVAL_CREATED, {
+      ...newCase,
+      estimatedArrivalMinutes: etaMinutes
+    }, { source: 'flow-engine', entityId: newCase.id });
+
+    return newCase;
+  },
+
+  /**
+   * Dispatch an ambulance from the hospital fleet
+   */
+  dispatchAmbulance(requestId, ambulanceId, etaMinutes = 15) {
+    const s = appState.get();
+    const req = (s.ambulanceRequests || []).find(r => r.requestId === requestId || r.id === requestId);
+    if (req) {
+      appState.updateItem('ambulanceRequests', req.id, {
+        status: 'DISPATCHED',
+        assignedAmbulanceId: ambulanceId,
+        estimatedHospitalArrival: etaMinutes,
+        dispatchedAt: new Date().toISOString()
+      });
+    }
+
+    if (ambulanceId) {
+      appState.updateItem('ambulances', ambulanceId, {
+        status: 'DISPATCHED',
+        assignedRequestId: requestId,
+        estimatedArrival: `${etaMinutes} min`
+      });
+    }
+
+    eventBus.emit(EventTypes.AMBULANCE_DISPATCHED, {
+      requestId,
+      ambulanceId,
+      pickupLocation: req?.pickupLocation || 'Emergency Location',
+      etaMinutes
+    }, { source: 'flow-engine', entityId: requestId });
+  },
+
+  /**
+   * Mark Ambulance as arrived at hospital trauma bay
+   */
+  markAmbulanceArrived(requestId) {
+    const s = appState.get();
+    const req = (s.ambulanceRequests || []).find(r => r.requestId === requestId || r.id === requestId);
+    if (!req) return;
+
+    appState.updateItem('ambulanceRequests', req.id, {
+      status: 'ARRIVED',
+      arrivedAt: new Date().toISOString()
+    });
+
+    if (req.assignedAmbulanceId) {
+      appState.updateItem('ambulances', req.assignedAmbulanceId, {
+        status: 'AVAILABLE',
+        assignedRequestId: null,
+        estimatedArrival: null
+      });
+    }
+
+    // Create active emergency case
+    const caseId = `E-${Date.now().toString().slice(-4)}`;
+    const newCase = {
+      id: generateId('EM'),
+      caseId,
+      patientId: req.patientId || `P-${Date.now().toString().slice(-4)}`,
+      patientName: req.patientName || 'Trauma Patient',
+      department: req.department || 'General Medicine',
+      symptoms: req.symptoms || 'Acute Trauma Intake',
+      transportMode: `Ambulance (${req.assignedAmbulanceId || 'AMB-01'})`,
+      etaMinutes: 0,
+      severity: req.severity || 'Critical',
+      priority: req.severity === 'Critical' ? 'P1 - Critical Emergency' : 'P2 - Urgent',
+      status: 'AWAITING_DOCTOR',
+      doctorId: null,
+      doctorName: null,
+      createdAt: new Date().toISOString()
+    };
+
+    appState.addItem('emergencyCases', newCase);
+
+    eventBus.emit(EventTypes.AMBULANCE_ARRIVED, {
+      requestId,
+      ambulanceId: req.assignedAmbulanceId,
+      caseId,
+      patientName: newCase.patientName
+    }, { source: 'flow-engine', entityId: requestId });
+  },
+
   _checkCongestion(department) {
     const s = appState.get();
     const waiting = s.queueEntries.filter(q =>

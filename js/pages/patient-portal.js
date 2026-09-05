@@ -184,15 +184,36 @@ export function renderPatientPortal(container, subRoute = 'home') {
 
   // Render Sub Route
   const subContentEl = container.querySelector('#patient-sub-content');
-  switch (subRoute) {
-    case 'home': renderPatientHome(subContentEl, patient); break;
-    case 'appointments': renderPatientAppointments(subContentEl, patient); break;
-    case 'queue': renderPatientQueue(subContentEl, patient); break;
-    case 'care': renderPatientCare(subContentEl, patient); break;
-    case 'emergency-status': renderPatientEmergencyWorkflow(subContentEl, patient); break;
-    case 'profile': renderPatientProfilePage(subContentEl, patient); break;
-    default: renderPatientHome(subContentEl, patient); break;
-  }
+  const renderCurrentSubRoute = () => {
+    if (!subContentEl || !document.body.contains(subContentEl)) return;
+    switch (subRoute) {
+      case 'home': renderPatientHome(subContentEl, patient); break;
+      case 'appointments': renderPatientAppointments(subContentEl, patient); break;
+      case 'queue': renderPatientQueue(subContentEl, patient); break;
+      case 'care': renderPatientCare(subContentEl, patient); break;
+      case 'emergency-status': renderPatientEmergencyWorkflow(subContentEl, patient); break;
+      case 'profile': renderPatientProfilePage(subContentEl, patient); break;
+      default: renderPatientHome(subContentEl, patient); break;
+    }
+  };
+
+  renderCurrentSubRoute();
+
+  // Reactive subscription for zero-refresh operational synchronization
+  const unsubscribeState = appState.subscribe(() => {
+    if (document.body.contains(subContentEl)) {
+      renderCurrentSubRoute();
+    }
+  });
+
+  // Clean up observer
+  const observer = new MutationObserver(() => {
+    if (!document.body.contains(container)) {
+      unsubscribeState();
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
 // ============================================
@@ -689,6 +710,7 @@ function renderPatientQueue(el, patient) {
   }
 
   const assignedDoc = s.doctors.find(d => d.id === queueEntry.doctorId);
+  const hasEmergencyDisruption = (s.emergencyCases || []).some(c => (c.department === queueEntry.department || c.doctorId === queueEntry.doctorId) && c.status !== 'COMPLETED');
 
   el.innerHTML = `
     <div class="patient-queue-layout animate-fade-in" style="max-width: 680px; margin: 0 auto">
@@ -698,6 +720,18 @@ function renderPatientQueue(el, patient) {
           <div style="font-size: 44px; font-weight: 800; margin: 2px 0">${queueEntry.id}</div>
           <div style="font-size: var(--font-size-sm); opacity: 0.95">${escapeHtml(queueEntry.department)} · Dr. ${escapeHtml(assignedDoc?.displayName || '')}</div>
         </div>
+
+        <!-- Privacy-Safe Emergency Delay Notification Banner (Requirement 11) -->
+        ${hasEmergencyDisruption ? `
+          <div class="card-inner-box animate-fade-in" style="background: #FFFBEB; border: 1px solid #FCD34D; margin: var(--space-4) 0 0; border-radius: var(--radius-md); padding: var(--space-3)">
+            <div class="flex items-center gap-2" style="color: #92400E; font-weight: 700; font-size: var(--font-size-sm); margin-bottom: 2px">
+              <i class="fas fa-exclamation-circle"></i> Priority Triage Operational Notice
+            </div>
+            <p style="font-size: var(--font-size-xs); color: #78350F; margin: 0; line-height: 1.5">
+              An emergency case has affected your department. Your updated estimated wait is approximately <strong>${formatMinutes(queueEntry.estimatedWait || 27)}</strong>. Hospital clinical staff are actively balancing throughput.
+            </p>
+          </div>
+        ` : ''}
 
         <div class="grid-3" style="margin: var(--space-5) 0">
           <div class="metric-card">

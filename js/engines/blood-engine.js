@@ -63,6 +63,19 @@ const BloodEngine = {
       component
     }, { source: 'blood-engine', entityId: requestId });
 
+    if (urgency === 'Emergency' || urgency === 'Critical') {
+      eventBus.emit(EventTypes.BLOOD_REQUEST_CRITICAL, {
+        requestId,
+        patientId,
+        patientName: patient?.displayName,
+        bloodGroup,
+        units,
+        urgency,
+        department,
+        component
+      }, { source: 'blood-engine', entityId: requestId });
+    }
+
     NotificationManager.create({
       type: 'Blood',
       category: 'Emergency',
