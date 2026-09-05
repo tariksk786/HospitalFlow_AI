@@ -45,14 +45,17 @@ export function renderAdminPortal(container, subRoute = 'command') {
 
   const unackAlerts = alertManager.getUnacknowledgedCount('admin');
 
-  // Trigger emergency alert check on admin initialization if active P1/P2 cases exist
+  // Trigger emergency alert sound & voice on admin login/initialization if active emergency cases exist
   const activeEmergencies = (appState.get().emergencyCases || []).filter(c => c.status !== 'COMPLETED');
-  if (activeEmergencies.length > 0) {
-    try {
-      alertManager.checkAndAlert('admin');
-    } catch (e) {
-      console.warn('AlertManager init warning:', e);
-    }
+  const activeUnackCount = alertManager.getUnacknowledgedCount('admin');
+  if (activeEmergencies.length > 0 || activeUnackCount > 0) {
+    setTimeout(() => {
+      try {
+        alertManager.checkAndAlert('admin');
+      } catch (e) {
+        console.warn('AlertManager init warning:', e);
+      }
+    }, 450);
   }
 
   container.innerHTML = `

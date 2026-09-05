@@ -101,6 +101,27 @@ class EmergencyAlertManager {
   }
 
   /**
+   * Check active emergencies on login and automatically play audio chime & voice alert
+   */
+  checkAndAlert(role = 'admin', userId = null) {
+    this.ensureAudioUnlocked();
+    const activeAlerts = this.getActiveAlerts(role, userId);
+    const s = appState.get();
+    const activeEmergencies = (s.emergencyCases || []).filter(c => c.status !== 'COMPLETED');
+
+    if (activeAlerts.length > 0 || activeEmergencies.length > 0) {
+      const topP1 = activeAlerts.some(a => a.priority === 'P1' || a.severity === 'CRITICAL') ||
+                    activeEmergencies.some(c => (c.priority || '').includes('P1') || (c.severity || '').includes('Critical'));
+
+      const count = activeAlerts.length || activeEmergencies.length;
+      this.playEmergencyChime(topP1 ? 'P1' : 'P2');
+      setTimeout(() => {
+        this.speakAlert(`Attention: ${count} active emergency case${count > 1 ? 's require' : ' requires'} clinical oversight.`);
+      }, 450);
+    }
+  }
+
+  /**
    * Bind user interaction to initialize AudioContext & SpeechSynthesis
    */
   _bindAudioInitializer() {

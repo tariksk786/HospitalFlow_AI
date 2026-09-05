@@ -8,6 +8,7 @@ import Storage from './storage.js';
 import eventBus, { EventTypes } from './events.js';
 import { demoUsers } from './demo-data.js';
 import { generateSeqId } from './utils.js';
+import alertManager from './engines/emergency-alert-manager.js';
 
 const Auth = {
   supabase: null,
@@ -396,6 +397,10 @@ const Auth = {
 
     // 4. Initialize role-scoped session
     this._setCurrentUser(user);
+
+    try {
+      alertManager.ensureAudioUnlocked();
+    } catch (e) {}
 
     eventBus.emit(EventTypes.USER_LOGGED_IN, {
       displayName: user.displayName,
