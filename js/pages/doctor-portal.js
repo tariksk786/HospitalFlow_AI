@@ -462,18 +462,36 @@ function renderDoctorDashboard(el, doctor) {
 }
 
 // ============================================
+// ============================================
 // 2. DOCTOR APPOINTMENTS SCHEDULE VIEW
 // ============================================
 function renderDoctorAppointments(el, doctor) {
   const s = appState.get();
-  const myApts = s.appointments
-    .filter(a => a.doctorId === doctor.id)
+  let myApts = s.appointments
+    .filter(a => a.doctorId === doctor.id || a.doctorId === `D-${doctor.id.replace('DOC-', '')}` || a.department === doctor.department)
     .sort((a, b) => new Date(a.scheduledTime) - new Date(b.scheduledTime));
+
+  // Seed rich demo appointments if empty so Dr. Aarav Sharma always has consultations
+  if (myApts.length === 0) {
+    const defaultApts = [
+      { id: 'APT-3101', patientId: 'P-1001', doctorId: doctor.id, department: doctor.department || 'General Medicine', status: 'Scheduled', scheduledTime: new Date(Date.now() + 30 * 60000).toISOString(), priority: 'normal', symptom_original_text: 'Seasonal Flu, High Fever and Dry Cough' },
+      { id: 'APT-3102', patientId: 'P-1003', doctorId: doctor.id, department: doctor.department || 'General Medicine', status: 'Scheduled', scheduledTime: new Date(Date.now() + 75 * 60000).toISOString(), priority: 'normal', symptom_original_text: 'Acid Reflux, Acute Abdominal Discomfort' },
+      { id: 'APT-3103', patientId: 'P-1004', doctorId: doctor.id, department: doctor.department || 'General Medicine', status: 'Scheduled', scheduledTime: new Date(Date.now() + 120 * 60000).toISOString(), priority: 'normal', symptom_original_text: 'Persistent Migraine and Throat Irritation' }
+    ];
+    defaultApts.forEach(a => appState.addItem('appointments', a));
+    myApts = defaultApts;
+  }
 
   el.innerHTML = `
     <div class="doctor-appointments-layout animate-fade-in">
       <div class="card" style="margin-bottom: var(--space-4)">
-        <h3 class="card-title"><i class="fas fa-calendar-alt" style="color: var(--primary)"></i> Consultation Schedule (${myApts.length} Appointments)</h3>
+        <div class="flex justify-between items-center">
+          <div>
+            <h3 class="card-title" style="margin: 0"><i class="fas fa-calendar-alt" style="color: var(--primary)"></i> Consultation Schedule (${myApts.length} Appointments)</h3>
+            <p style="margin: 0; font-size: var(--font-size-xs); color: var(--text-secondary)">Scheduled OPD patient consultations for Dr. ${escapeHtml(doctor.displayName)}</p>
+          </div>
+          <span class="badge badge-primary">${doctor.department}</span>
+        </div>
       </div>
 
       <div class="grid-2" style="gap: var(--space-4)">
@@ -482,11 +500,14 @@ function renderDoctorAppointments(el, doctor) {
           return `
             <div class="card" style="border-left: 4px solid var(--primary)">
               <div class="flex justify-between items-center" style="margin-bottom: var(--space-2)">
-                <strong style="font-size: var(--font-size-md)">${escapeHtml(pt?.displayName || apt.patientId)}</strong>
+                <div>
+                  <strong style="font-size: var(--font-size-md)">${escapeHtml(pt?.displayName || apt.patientId)}</strong>
+                  <span style="font-size: 11px; color: var(--text-secondary); margin-left: 6px">(${apt.patientId})</span>
+                </div>
                 <span class="badge ${apt.status === 'Scheduled' ? 'badge-info' : 'badge-success'}">${apt.status}</span>
               </div>
               <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-bottom: var(--space-3)">
-                Time: <strong>${formatTime(apt.scheduledTime)}</strong> · Symptoms: <em>"${escapeHtml(apt.symptom_original_text || 'Fever, Cough')}"</em>
+                Time: <strong>${formatTime(apt.scheduledTime)}</strong> (${formatDate(apt.scheduledTime)}) · Symptoms: <em>"${escapeHtml(apt.symptom_original_text || 'Fever, Cough')}"</em>
               </div>
               <div class="flex gap-2">
                 <button class="btn btn-primary btn-sm" onclick="window._handleDoctorCallAppointment('${apt.id}')">
@@ -494,6 +515,9 @@ function renderDoctorAppointments(el, doctor) {
                 </button>
                 <button class="btn btn-secondary btn-sm" onclick="window._showDoctorCareHistoryDrawer('${apt.patientId}')">
                   <i class="fas fa-history"></i> Care History
+                </button>
+                <button class="btn btn-ghost btn-sm" onclick="window._showDoctorCarePlanAuthorModal('${apt.patientId}')">
+                  <i class="fas fa-notes-medical"></i> Care Plan
                 </button>
               </div>
             </div>
@@ -646,22 +670,49 @@ function renderDoctorCarePlans(el, doctor) {
   el.innerHTML = `
     <div class="doctor-care-plans-layout animate-fade-in">
       <div class="card" style="margin-bottom: var(--space-4)">
-        <h3 class="card-title"><i class="fas fa-notes-medical" style="color: var(--success)"></i> Patient Discharge Care Plans</h3>
+        <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: var(--space-3)">
+          <div>
+            <h3 class="card-title" style="margin: 0"><i class="fas fa-notes-medical" style="color: var(--success)"></i> Patient Discharge Care Plans</h3>
+            <p style="margin: 0; font-size: var(--font-size-xs); color: var(--text-secondary)">Author prescriptions, post-discharge medication schedules & dietary recovery protocols</p>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="window._showDoctorCarePlanAuthorModal()">
+            <i class="fas fa-plus"></i> Author New Care Plan
+          </button>
+        </div>
       </div>
 
       <div class="grid-2" style="gap: var(--space-4)">
-        ${plans.map(p => `
-          <div class="card" style="border-left: 4px solid var(--success)">
-            <div class="flex justify-between items-center" style="margin-bottom: var(--space-2)">
-              <strong>Plan ${p.id} (${p.patientId})</strong>
-              <span class="badge badge-success">Active</span>
+        ${plans.map(p => {
+          const pt = s.patients.find(pt => pt.id === p.patientId);
+          return `
+            <div class="card" style="border-left: 4px solid var(--success)">
+              <div class="flex justify-between items-start" style="margin-bottom: var(--space-2)">
+                <div>
+                  <strong style="font-size: var(--font-size-md)">${escapeHtml(pt?.displayName || p.patientId)}</strong>
+                  <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">Plan ID: <strong>${p.id}</strong> · Patient: <strong>${p.patientId}</strong></div>
+                </div>
+                <span class="badge badge-success"><i class="fas fa-check-circle"></i> ${p.active ? 'Active Plan' : 'Completed'}</span>
+              </div>
+              <div class="card-inner-box" style="background: var(--bg-subtle); margin: var(--space-2) 0">
+                <div style="font-size: 11px; font-weight: 700; color: var(--teal); margin-bottom: 2px">Prescribed Medications (${p.medications.length}):</div>
+                <div style="font-size: var(--font-size-xs); color: var(--text)">
+                  ${p.medications.map(m => `<strong>${escapeHtml(m.name)}</strong> (${m.timeSlot || 'Daily'})`).join(' · ')}
+                </div>
+              </div>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: var(--space-3)">
+                <strong>Diet:</strong> ${escapeHtml(p.dietaryInstructions || p.dietPlan || 'Standard recovery diet')}
+              </div>
+              <div class="flex gap-2">
+                <button class="btn btn-secondary btn-sm" style="flex: 1" onclick="window._showDoctorCarePlanAuthorModal('${p.patientId}')">
+                  <i class="fas fa-edit"></i> Edit Plan
+                </button>
+                <button class="btn btn-ghost btn-sm" onclick="window._showDoctorCareHistoryDrawer('${p.patientId}')">
+                  <i class="fas fa-history"></i> Care History
+                </button>
+              </div>
             </div>
-            <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-bottom: var(--space-2)">
-              Medications: ${p.medications.map(m => m.name).join(', ')}
-            </div>
-            <div style="font-size: 11px; color: var(--text-secondary)">Diet: ${escapeHtml(p.dietPlan || 'Standard recovery diet')}</div>
-          </div>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
     </div>
   `;
@@ -965,37 +1016,166 @@ window._showDoctorBloodRequestModal = (patientId) => {
 
 window._showDoctorCarePlanAuthorModal = (patientId) => {
   const s = appState.get();
-  const pt = s.patients.find(p => p.id === patientId);
   const modalRoot = document.getElementById('doctor-modal-root') || document.body;
+  const targetPatient = patientId ? s.patients.find(p => p.id === patientId) : s.patients[0];
+  const existingPlan = targetPatient ? (s.dischargePlans || []).find(dp => dp.patientId === targetPatient.id) : null;
 
   modalRoot.innerHTML = `
     <div class="modal-backdrop active">
-      <div class="modal active" style="max-width: 580px">
+      <div class="modal active" style="max-width: 680px">
         <div class="modal-header">
-          <h3 class="modal-title" style="color: var(--success)"><i class="fas fa-file-medical"></i> Author Discharge Care Plan</h3>
+          <h3 class="modal-title" style="color: var(--success)"><i class="fas fa-file-medical"></i> Author Patient Discharge Care Plan</h3>
           <button class="modal-close" onclick="this.closest('.modal-backdrop').remove()">&times;</button>
         </div>
-        <div class="modal-body">
-          <p style="font-size: var(--font-size-xs); color: var(--text-secondary)">Authoring care continuity plan for <strong>${escapeHtml(pt?.displayName || patientId)}</strong></p>
-          <div class="form-group">
-            <label class="form-label">Primary Medication</label>
-            <input type="text" id="cp-med-name" class="form-input" value="Azithromycin 500mg (1 tablet morning)">
+        <form id="doctor-care-plan-form">
+          <div class="modal-body" style="max-height: 70vh; overflow-y: auto">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Select Patient <span class="required">*</span></label>
+                <select id="cp-patient-select" class="form-select" required>
+                  ${s.patients.map(p => `
+                    <option value="${p.id}" ${p.id === (patientId || targetPatient?.id) ? 'selected' : ''}>
+                      ${escapeHtml(p.displayName)} (${p.id} · ${p.bloodGroup})
+                    </option>
+                  `).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Follow-Up Schedule</label>
+                <select id="cp-followup-select" class="form-select">
+                  <option value="In 7 Days">In 7 Days (Standard Review)</option>
+                  <option value="In 3 Days">In 3 Days (Urgent Review)</option>
+                  <option value="In 14 Days">In 14 Days (Post-Op Check)</option>
+                  <option value="SOS">SOS / As Needed</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" style="font-weight: 700; color: var(--primary)"><i class="fas fa-pills"></i> Prescribed Medications (Dosage & Timing)</label>
+              <div id="cp-meds-list" class="flex flex-col gap-2">
+                <div class="med-row grid-3" style="gap: var(--space-2)">
+                  <input type="text" class="form-input cp-med-name" placeholder="Medication (e.g. Paracetamol 500mg)" value="${existingPlan?.medications[0]?.name || 'Paracetamol 500mg'}" required>
+                  <select class="form-select cp-med-slot">
+                    <option value="Morning">Morning (08:00 AM)</option>
+                    <option value="Afternoon">Afternoon (01:00 PM)</option>
+                    <option value="Evening">Evening (06:00 PM)</option>
+                    <option value="Night">Night (09:00 PM)</option>
+                  </select>
+                  <input type="text" class="form-input cp-med-inst" placeholder="Instructions" value="${existingPlan?.medications[0]?.instructions || '1 tablet after food'}">
+                </div>
+                <div class="med-row grid-3" style="gap: var(--space-2)">
+                  <input type="text" class="form-input cp-med-name" placeholder="Medication (e.g. Omeprazole 20mg)" value="${existingPlan?.medications[1]?.name || 'Omeprazole 20mg'}">
+                  <select class="form-select cp-med-slot">
+                    <option value="Morning" selected>Morning (08:00 AM)</option>
+                    <option value="Night">Night (09:00 PM)</option>
+                  </select>
+                  <input type="text" class="form-input cp-med-inst" placeholder="Instructions" value="${existingPlan?.medications[1]?.instructions || '1 capsule before breakfast'}">
+                </div>
+                <div class="med-row grid-3" style="gap: var(--space-2)">
+                  <input type="text" class="form-input cp-med-name" placeholder="Medication (e.g. Cetirizine 10mg)" value="${existingPlan?.medications[2]?.name || 'Cetirizine 10mg'}">
+                  <select class="form-select cp-med-slot">
+                    <option value="Night" selected>Night (09:00 PM)</option>
+                    <option value="Morning">Morning (08:00 AM)</option>
+                  </select>
+                  <input type="text" class="form-input cp-med-inst" placeholder="Instructions" value="${existingPlan?.medications[2]?.instructions || '1 tablet before sleep'}">
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label"><i class="fas fa-utensils"></i> Dietary Protocol</label>
+                <textarea id="cp-diet" class="form-textarea" rows="2">${existingPlan?.dietaryInstructions || existingPlan?.dietPlan || 'Light meals, avoid oily and spicy food. Increase fluid and fruit intake.'}</textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label"><i class="fas fa-bed"></i> Recovery Guidelines</label>
+                <textarea id="cp-recovery" class="form-textarea" rows="2">${existingPlan?.recoveryInstructions || existingPlan?.instructions || 'Adequate bed rest for 48 hours. Avoid heavy weight lifting for 7 days.'}</textarea>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label"><i class="fas fa-exclamation-triangle" style="color: var(--critical)"></i> Red Flag / Warning Signs to Report</label>
+              <input type="text" id="cp-warnings" class="form-input" value="Fever >101°F for over 4 hours, sudden chest pain, severe shortness of breath, extreme dizziness">
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Dietary Instructions</label>
-            <textarea id="cp-diet" class="form-textarea" rows="2">Light meals, high fluid intake, avoid spicy foods.</textarea>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-backdrop').remove()">Cancel</button>
+            <button type="submit" class="btn btn-success"><i class="fas fa-check-circle"></i> Save & Authorize Care Plan</button>
           </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="this.closest('.modal-backdrop').remove()">Cancel</button>
-          <button class="btn btn-success" id="btn-save-care-plan"><i class="fas fa-save"></i> Save & Authorize Plan</button>
-        </div>
+        </form>
       </div>
     </div>
   `;
 
-  modalRoot.querySelector('#btn-save-care-plan')?.addEventListener('click', () => {
+  modalRoot.querySelector('#doctor-care-plan-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const pid = modalRoot.querySelector('#cp-patient-select').value;
+    const ptObj = s.patients.find(p => p.id === pid);
+    const followup = modalRoot.querySelector('#cp-followup-select').value;
+    const diet = modalRoot.querySelector('#cp-diet').value;
+    const recovery = modalRoot.querySelector('#cp-recovery').value;
+    const warnings = modalRoot.querySelector('#cp-warnings').value.split(',').map(w => w.trim()).filter(Boolean);
+
+    const medRows = modalRoot.querySelectorAll('.med-row');
+    const meds = [];
+    medRows.forEach(row => {
+      const name = row.querySelector('.cp-med-name').value.trim();
+      const timeSlot = row.querySelector('.cp-med-slot').value;
+      const inst = row.querySelector('.cp-med-inst').value.trim();
+      if (name) {
+        meds.push({
+          name,
+          dosage: '1 unit',
+          timeSlot,
+          timing: `${timeSlot} (${timeSlot === 'Morning' ? '08:00 AM' : timeSlot === 'Afternoon' ? '01:00 PM' : timeSlot === 'Evening' ? '06:00 PM' : '09:00 PM'})`,
+          duration: '5-7 days',
+          instructions: inst || 'After food',
+          taken: false,
+          skipped: false
+        });
+      }
+    });
+
+    const user = Auth.getCurrentUser();
+    const planId = `DP-${Date.now().toString().slice(-4)}`;
+
+    const newPlan = {
+      id: planId,
+      patientId: pid,
+      patientName: ptObj?.displayName || 'Patient',
+      doctorId: user?.doctorId || 'D-0001',
+      doctorName: user?.displayName || 'Dr. Aarav Sharma',
+      department: user?.department || 'General Medicine',
+      active: true,
+      medications: meds,
+      dietPlan: diet,
+      dietaryInstructions: diet,
+      instructions: recovery,
+      recoveryInstructions: recovery,
+      warningSigns: warnings,
+      followUp: { department: user?.department || 'General Medicine', date: followup, time: '10:00 AM' },
+      createdAt: new Date().toISOString()
+    };
+
+    const existingIdx = (s.dischargePlans || []).findIndex(dp => dp.patientId === pid);
+    if (existingIdx >= 0) {
+      appState.updateItem('dischargePlans', s.dischargePlans[existingIdx].id, newPlan);
+    } else {
+      appState.addItem('dischargePlans', newPlan);
+    }
+
+    eventBus.emit(EventTypes.CARE_PLAN_CREATED, {
+      patientId: pid,
+      patientName: ptObj?.displayName || 'Patient',
+      planId: planId,
+      doctorName: user?.displayName || 'Dr. Aarav Sharma'
+    });
+
     modalRoot.innerHTML = '';
-    alert('Discharge care plan saved and synchronized to Patient Portal.');
+    alert(`Discharge Care Plan ${planId} successfully authorized for ${ptObj?.displayName || pid} and synchronized to Patient Portal!`);
+
+    const subContentEl = document.querySelector('#doctor-sub-content');
+    if (subContentEl) renderDoctorCarePlans(subContentEl, Auth.getCurrentUser());
   });
 };

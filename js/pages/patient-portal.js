@@ -788,14 +788,14 @@ function renderPatientCare(el, patient) {
                     <span class="badge badge-warning" style="padding: 6px 12px; font-size: 12px">
                       <i class="fas fa-exclamation-triangle"></i> Skipped (${med.skipReason || 'Feeling Unwell'})
                     </span>
-                    <button class="btn btn-ghost btn-sm" onclick="window.HospitalFlow.toggleMedication('${patient.id}', '${med.name}', '${med.timeSlot}')" title="Undo and mark taken">
+                    <button class="btn btn-ghost btn-sm" onclick="window.HospitalFlow.toggleMedication('${patient.id}', '${med.name}', '${med.timeSlot}', '${plan.id}')" title="Undo and mark taken">
                       <i class="fas fa-redo"></i> Mark Taken
                     </button>
                   ` : `
-                    <button class="btn btn-success btn-sm" onclick="window.HospitalFlow.toggleMedication('${patient.id}', '${med.name}', '${med.timeSlot}')">
+                    <button class="btn btn-success btn-sm" onclick="window.HospitalFlow.toggleMedication('${patient.id}', '${med.name}', '${med.timeSlot}', '${plan.id}')">
                       <i class="fas fa-check"></i> ${t('care.mark_taken_btn') || 'Mark Taken'}
                     </button>
-                    <button class="btn btn-secondary btn-sm" onclick="window._showSkipMedicationModal('${patient.id}', '${med.name}', '${med.timeSlot}')">
+                    <button class="btn btn-secondary btn-sm" onclick="window._showSkipMedicationModal('${patient.id}', '${med.name}', '${med.timeSlot}', '${plan.id}')">
                       <i class="fas fa-forward"></i> ${t('care.skip_dose_btn') || 'Skip Dose'}
                     </button>
                   `}
@@ -1718,7 +1718,7 @@ window._showPostDischargeReportModal = (patientId) => {
     eventBus.emit(EventTypes.POST_DISCHARGE_REPORT_CREATED, report);
 
     modalRoot.innerHTML = '';
-    alert('Problem report submitted. Your physician and hospital care team have been alerted.');
+alert('Problem report submitted. Your physician and hospital care team have been alerted.');
   });
 };
 
@@ -1753,4 +1753,187 @@ window._showAppointmentQRModal = (appointmentId) => {
       colorLight: '#ffffff'
     });
   }
+};
+
+// Book New Appointment Modal
+window._showBookAppointmentModal = (patientId) => {
+  const s = appState.get();
+  const modalRoot = document.getElementById('patient-modal-root') || document.body;
+  const user = Auth.getCurrentUser();
+  const pt = s.patients.find(p => p.id === patientId) || { id: patientId, displayName: user?.displayName || 'Patient' };
+
+  modalRoot.innerHTML = `
+    <div class="modal-backdrop active">
+      <div class="modal active" style="max-width: 560px">
+        <div class="modal-header">
+          <h3 class="modal-title" style="color: var(--primary)"><i class="fas fa-calendar-plus"></i> ${t('patient.book_new_apt') || 'Book New Consultation'}</h3>
+          <button class="modal-close" onclick="this.closest('.modal-backdrop').remove()">&times;</button>
+        </div>
+        <form id="patient-book-apt-form">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Patient</label>
+              <input type="text" class="form-input" value="${escapeHtml(pt.displayName)} (${pt.id})" disabled style="background: var(--bg-subtle)">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Clinical Department <span class="required">*</span></label>
+                <select id="book-dept-select" class="form-select" required>
+                  ${Config.DEPARTMENTS.map(d => `<option value="${d}">${d}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Consulting Doctor</label>
+                <select id="book-doc-select" class="form-select">
+                  ${s.doctors.map(doc => `<option value="${doc.id}">Dr. ${escapeHtml(doc.displayName)} (${doc.department})</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Consultation Date <span class="required">*</span></label>
+                <input type="date" id="book-date" class="form-input" value="${new Date().toISOString().split('T')[0]}" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Preferred Time Slot <span class="required">*</span></label>
+                <select id="book-slot-select" class="form-select" required>
+                  <option value="10:00 AM">10:00 AM (Morning Slot)</option>
+                  <option value="10:30 AM">10:30 AM (Morning Slot)</option>
+                  <option value="11:00 AM">11:00 AM (Morning Slot)</option>
+                  <option value="11:30 AM">11:30 AM (Morning Slot)</option>
+                  <option value="02:00 PM">02:00 PM (Afternoon Slot)</option>
+                  <option value="03:00 PM">03:00 PM (Afternoon Slot)</option>
+                  <option value="04:30 PM">04:30 PM (Evening Slot)</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Reported Symptoms / Reason for Visit <span class="required">*</span></label>
+              <textarea id="book-symptoms" class="form-textarea" rows="2" placeholder="e.g. Mild fever, dry cough, body ache since 2 days" required></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-backdrop').remove()">Cancel</button>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-check-circle"></i> Confirm Consultation Booking</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  // Filter doctor select when department changes
+  const deptSelect = modalRoot.querySelector('#book-dept-select');
+  const docSelect = modalRoot.querySelector('#book-doc-select');
+  deptSelect?.addEventListener('change', () => {
+    const selectedDept = deptSelect.value;
+    const filteredDocs = s.doctors.filter(d => d.department === selectedDept);
+    docSelect.innerHTML = (filteredDocs.length > 0 ? filteredDocs : s.doctors).map(doc =>
+      `<option value="${doc.id}">Dr. ${escapeHtml(doc.displayName)} (${doc.department})</option>`
+    ).join('');
+  });
+
+  modalRoot.querySelector('#patient-book-apt-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const department = deptSelect.value;
+    const doctorId = docSelect.value;
+    const symptoms = modalRoot.querySelector('#book-symptoms').value;
+    const timeSlot = modalRoot.querySelector('#book-slot-select').value;
+    const dateStr = modalRoot.querySelector('#book-date').value;
+
+    const aptResult = FlowEngine.bookAppointment({
+      patientId: pt.id,
+      doctorId,
+      department,
+      symptoms,
+      scheduledTime: `${dateStr}T${timeSlot.includes('PM') ? (parseInt(timeSlot) + 12 || 14) : timeSlot.slice(0, 2)}:00:00`,
+      priority: 'normal'
+    });
+
+    modalRoot.innerHTML = '';
+    alert('Appointment booked successfully! Express Check-In QR code is ready in your Appointments tab.');
+    const subContentEl = document.querySelector('#patient-sub-content');
+    if (subContentEl) renderPatientAppointments(subContentEl, pt);
+  });
+};
+
+// Emergency Assistance Modal
+window._showEmergencyHelpModal = (patientId) => {
+  const modalRoot = document.getElementById('patient-modal-root') || document.body;
+
+  modalRoot.innerHTML = `
+    <div class="modal-backdrop active">
+      <div class="modal active" style="max-width: 500px">
+        <div class="modal-header" style="background: var(--critical); color: white; border-radius: var(--radius-lg) var(--radius-lg) 0 0">
+          <h3 class="modal-title" style="color: white"><i class="fas fa-truck-medical"></i> 24x7 Emergency Assistance</h3>
+          <button class="modal-close" style="color: white" onclick="this.closest('.modal-backdrop').remove()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="card-inner-box" style="background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B; margin-bottom: var(--space-4)">
+            <strong>Hospital Emergency Helpline:</strong><br>
+            Direct 24/7 Hotline: <a href="tel:108" style="color: #DC2626; font-weight: 800; font-size: 16px">108</a> · Hospital Trauma Bay: <a href="tel:+919876543210" style="color: #DC2626; font-weight: 800">+91 98765 43210</a>
+          </div>
+
+          <div class="flex flex-col gap-3">
+            <button class="btn btn-danger btn-lg" style="width: 100%; justify-content: flex-start; text-align: left; padding: 14px 18px" onclick="this.closest('.modal-backdrop').remove(); window.HospitalFlow.router.navigate('/patient/emergency-status');">
+              <i class="fas fa-ambulance" style="font-size: 20px; margin-right: 10px"></i>
+              <div>
+                <div style="font-weight: 700">Request Hospital Ambulance Dispatch</div>
+                <div style="font-size: 11px; opacity: 0.9">Immediate GPS-enabled ambulance with paramedic triage</div>
+              </div>
+            </button>
+
+            <button class="btn btn-warning btn-lg" style="width: 100%; justify-content: flex-start; text-align: left; padding: 14px 18px" onclick="this.closest('.modal-backdrop').remove(); window.HospitalFlow.router.navigate('/patient/emergency-status');">
+              <i class="fas fa-car" style="font-size: 20px; margin-right: 10px"></i>
+              <div>
+                <div style="font-weight: 700">Self Arrival / Private Vehicle Notification</div>
+                <div style="font-size: 11px; opacity: 0.9">Notify Trauma Bay in advance so doctors are ready at the door</div>
+              </div>
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="this.closest('.modal-backdrop').remove()">Close</button>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+// Appointment Details Modal
+window._showAppointmentDetailsModal = (appointmentId) => {
+  const s = appState.get();
+  const apt = s.appointments.find(a => a.id === appointmentId) || { id: appointmentId, department: 'General Medicine', status: 'Scheduled', scheduledTime: new Date().toISOString() };
+  const doc = s.doctors.find(d => d.id === apt.doctorId);
+  const modalRoot = document.getElementById('patient-modal-root') || document.body;
+
+  modalRoot.innerHTML = `
+    <div class="modal-backdrop active">
+      <div class="modal active" style="max-width: 440px">
+        <div class="modal-header">
+          <h3 class="modal-title"><i class="fas fa-info-circle"></i> Consultation Details</h3>
+          <button class="modal-close" onclick="this.closest('.modal-backdrop').remove()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="flex justify-between items-center" style="margin-bottom: var(--space-3)">
+            <strong>${escapeHtml(apt.department)}</strong>
+            <span class="badge ${apt.status === 'Scheduled' ? 'badge-primary' : 'badge-success'}">${apt.status}</span>
+          </div>
+          <p style="font-size: var(--font-size-xs); color: var(--text-secondary); margin: 0 0 var(--space-2)">
+            Assigned Doctor: <strong>Dr. ${escapeHtml(doc?.displayName || 'Physician')}</strong> (${doc?.specialty || 'Specialist'})
+          </p>
+          <p style="font-size: var(--font-size-xs); color: var(--text-secondary); margin: 0 0 var(--space-3)">
+            Consultation Time: <strong>${formatTime(apt.scheduledTime)}</strong> (${formatDate(apt.scheduledTime)})
+          </p>
+          <div class="card-inner-box" style="background: var(--bg-subtle)">
+            <div style="font-size: 11px; color: var(--text-secondary)">Reported Symptoms:</div>
+            <div style="font-size: var(--font-size-xs); font-weight: 600">${escapeHtml(apt.symptom_original_text || 'Routine Clinical Checkup')}</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary btn-sm" onclick="this.closest('.modal-backdrop').remove()">Close</button>
+          ${apt.status === 'Scheduled' ? `<button class="btn btn-primary btn-sm" onclick="this.closest('.modal-backdrop').remove(); window.HospitalFlow.checkInPatient('${apt.id}')"><i class="fas fa-check"></i> Check In</button>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
 };

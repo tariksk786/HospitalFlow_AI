@@ -17,11 +17,40 @@ class EmergencyAlertManager {
 
     this._initListeners();
     this._bindAudioInitializer();
+    this._requestNotificationPermission();
   }
 
   toggleMute() {
     this.isMuted = !this.isMuted;
+    if (!this.isMuted) {
+      this.ensureAudioUnlocked();
+    }
     return this.isMuted;
+  }
+
+  _requestNotificationPermission() {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      try {
+        Notification.requestPermission().catch(() => {});
+      } catch (e) {}
+    }
+  }
+
+  ensureAudioUnlocked() {
+    try {
+      if (!this.audioContext) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          this.audioContext = new AudioContextClass();
+        }
+      }
+      if (this.audioContext && this.audioContext.state === 'suspended') {
+        this.audioContext.resume();
+      }
+      this.audioInitialized = true;
+    } catch (e) {
+      console.warn('Web Audio resume note:', e.message);
+    }
   }
 
   /**
@@ -29,26 +58,15 @@ class EmergencyAlertManager {
    */
   _bindAudioInitializer() {
     const unlockAudio = () => {
-      if (!this.audioContext) {
-        try {
-          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-          if (AudioContextClass) {
-            this.audioContext = new AudioContextClass();
-            if (this.audioContext.state === 'suspended') {
-              this.audioContext.resume();
-            }
-            this.audioInitialized = true;
-          }
-        } catch (e) {
-          console.warn('Web Audio initialization note:', e.message);
-        }
-      }
+      this.ensureAudioUnlocked();
       document.removeEventListener('click', unlockAudio);
       document.removeEventListener('keydown', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
     };
 
     document.addEventListener('click', unlockAudio, { once: true });
     document.addEventListener('keydown', unlockAudio, { once: true });
+    document.addEventListener('touchstart', unlockAudio, { once: true });
   }
 
   /**
@@ -357,6 +375,15 @@ class EmergencyAlertManager {
 
     appState.addItem('emergencyAlerts', alert);
     eventBus.emit(EventTypes.EMERGENCY_ALERT_CREATED, alert);
+
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(`🚨 ${alert.title}`, {
+          body: alert.message,
+          icon: 'favicon.ico'
+        });
+      } catch (e) {}
+    }
 
     return alert;
   }

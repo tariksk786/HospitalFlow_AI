@@ -105,6 +105,12 @@ export function renderAdminPortal(container, subRoute = 'command') {
           </div>
 
           <div class="header-right">
+            <!-- Audio Alerts Status Toggle -->
+            <button id="admin-sound-toggle-btn" class="btn btn-ghost btn-sm" onclick="window._toggleAdminSound()" title="Audio Alerts & Chimes" style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: ${alertManager.isMuted ? 'var(--text-muted)' : 'var(--primary)'}">
+              <i class="fas ${alertManager.isMuted ? 'fa-volume-mute' : 'fa-volume-up'}"></i>
+              <span>${alertManager.isMuted ? 'Muted' : 'Sound Active'}</span>
+            </button>
+
             <!-- Emergency Alert Bell -->
             <button class="header-alarm-btn" onclick="window.HospitalFlow.router.navigate('/admin/emergency')" title="Emergency Command">
               <i class="fas fa-ambulance"></i>
@@ -146,7 +152,8 @@ export function renderAdminPortal(container, subRoute = 'command') {
   `;
 
   // Render Alert Banner if any
-  alertManager.renderActiveAlertBanner(container.querySelector('#admin-emergency-alert-banner'), 'admin');
+  const alertBannerContainer = container.querySelector('#admin-emergency-alert-banner');
+  alertManager.renderActiveAlertBanner(alertBannerContainer, 'admin');
 
   // Sidebar Collapse
   const sidebar = container.querySelector('#admin-sidebar');
@@ -175,26 +182,82 @@ export function renderAdminPortal(container, subRoute = 'command') {
 
   renderCurrentSubRoute();
 
-  // Reactive subscription for zero-refresh operational synchronization
+  const updateAlarmBadgeAndBanner = () => {
+    if (!document.body.contains(container)) return;
+    const unack = alertManager.getUnacknowledgedCount('admin');
+    const alarmBtn = container.querySelector('.header-alarm-btn');
+    if (alarmBtn) {
+      const existingBadge = alarmBtn.querySelector('.header-alarm-badge');
+      if (unack > 0) {
+        if (existingBadge) existingBadge.textContent = unack;
+        else alarmBtn.insertAdjacentHTML('beforeend', `<span class="header-alarm-badge">${unack}</span>`);
+      } else if (existingBadge) {
+        existingBadge.remove();
+      }
+    }
+    const bannerEl = container.querySelector('#admin-emergency-alert-banner');
+    if (bannerEl) alertManager.renderActiveAlertBanner(bannerEl, 'admin');
+  };
+
+  // Reactive subscription for zero-refresh operational synchronization across devices
   const unsubscribeState = appState.subscribe(() => {
-    if (['patients', 'doctors'].includes(subRoute)) {
+    updateAlarmBadgeAndBanner();
+    if (['patients', 'doctors', 'command', 'emergency'].includes(subRoute)) {
       const active = document.activeElement;
-      if (active && (active.id === 'patient-search-input' || active.id === 'doctor-search-input')) {
-        return; // Don't interrupt search input typing
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'SELECT' || active.tagName === 'TEXTAREA')) {
+        return; // Don't interrupt user typing
       }
       renderCurrentSubRoute();
     }
   });
 
+  // Listen to remote realtime emergency events
+  const unsubsEvents = [
+    eventBus.on(EventTypes.EMERGENCY_ALERT_CREATED, () => {
+      updateAlarmBadgeAndBanner();
+      if (['emergency', 'command'].includes(subRoute)) renderCurrentSubRoute();
+    }),
+    eventBus.on(EventTypes.EMERGENCY_PREARRIVAL_CREATED, () => {
+      updateAlarmBadgeAndBanner();
+      if (['emergency', 'command'].includes(subRoute)) renderCurrentSubRoute();
+    }),
+    eventBus.on(EventTypes.EMERGENCY_CASE_CREATED, () => {
+      updateAlarmBadgeAndBanner();
+      if (['emergency', 'command'].includes(subRoute)) renderCurrentSubRoute();
+    }),
+    eventBus.on(EventTypes.AMBULANCE_REQUEST_CREATED, () => {
+      updateAlarmBadgeAndBanner();
+      if (['emergency', 'command'].includes(subRoute)) renderCurrentSubRoute();
+    }),
+    eventBus.on(EventTypes.EMERGENCY_ALERT_ACKNOWLEDGED, () => {
+      updateAlarmBadgeAndBanner();
+    })
+  ];
+
   // Auto clean up when container unmounts
   const observer = new MutationObserver(() => {
     if (!document.body.contains(container)) {
       unsubscribeState();
+      unsubsEvents.forEach(unsub => unsub?.());
       observer.disconnect();
     }
   });
   observer.observe(document.body, { childList: true, subtree: true });
 }
+
+// Global window handler for Admin sound toggle
+window._toggleAdminSound = () => {
+  const isMuted = alertManager.toggleMute();
+  if (!isMuted) {
+    alertManager.ensureAudioUnlocked();
+    alertManager.playEmergencyChime('P2');
+  }
+  const btn = document.getElementById('admin-sound-toggle-btn');
+  if (btn) {
+    btn.innerHTML = `<i class="fas ${isMuted ? 'fa-volume-mute' : 'fa-volume-up'}"></i> <span>${isMuted ? 'Muted' : 'Sound Active'}</span>`;
+    btn.style.color = isMuted ? 'var(--text-muted)' : 'var(--primary)';
+  }
+};
 
 // ============================================
 // 1. ADMIN PATIENTS PAGE (LIVE JOURNEY CARDS + SEARCH)

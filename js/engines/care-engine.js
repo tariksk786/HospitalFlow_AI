@@ -143,7 +143,10 @@ const CareEngine = {
   /**
    * Acknowledge medication taken
    */
-  acknowledgeMedication(patientId, medicationName, timeSlot) {
+  /**
+   * Acknowledge medication taken
+   */
+  acknowledgeMedication(patientId, medicationName, timeSlot, planId = null) {
     const s = appState.get();
     const patient = s.patients.find(p => p.id === patientId);
     const tracking = s.medicationTracking || {};
@@ -167,7 +170,14 @@ const CareEngine = {
     appState.update({ medicationTracking: { ...tracking } });
 
     // Update discharge plan medications
-    const plan = s.dischargePlans.find(dp => dp.patientId === patientId && dp.active);
+    let plan = null;
+    if (planId) {
+      plan = (s.dischargePlans || []).find(dp => dp.id === planId);
+    }
+    if (!plan) {
+      plan = (s.dischargePlans || []).find(dp => dp.patientId === patientId && dp.active) || s.dischargePlans[0];
+    }
+
     if (plan && plan.medications) {
       const med = plan.medications.find(m => m.name === medicationName && (!timeSlot || m.timeSlot === timeSlot));
       if (med) {
@@ -181,7 +191,7 @@ const CareEngine = {
 
     // Update related reminder
     const reminder = s.reminders.find(r =>
-      r.patientId === patientId &&
+      (r.patientId === patientId || !r.patientId) &&
       r.message.includes(medicationName) &&
       r.status !== 'Acknowledged'
     );
@@ -214,7 +224,7 @@ const CareEngine = {
   /**
    * Record medication as skipped with reason
    */
-  recordSkippedMedication(patientId, medicationName, timeSlot, reason = 'Forgot') {
+  recordSkippedMedication(patientId, medicationName, timeSlot, reason = 'Forgot', planId = null) {
     const s = appState.get();
     const patient = s.patients.find(p => p.id === patientId);
 
@@ -241,7 +251,14 @@ const CareEngine = {
     appState.update({ medicationTracking: { ...tracking } });
 
     // Update discharge plan medications
-    const plan = s.dischargePlans.find(dp => dp.patientId === patientId && dp.active);
+    let plan = null;
+    if (planId) {
+      plan = (s.dischargePlans || []).find(dp => dp.id === planId);
+    }
+    if (!plan) {
+      plan = (s.dischargePlans || []).find(dp => dp.patientId === patientId && dp.active) || s.dischargePlans[0];
+    }
+
     if (plan && plan.medications) {
       const med = plan.medications.find(m => m.name === medicationName && (!timeSlot || m.timeSlot === timeSlot));
       if (med) {

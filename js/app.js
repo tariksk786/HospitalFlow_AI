@@ -220,8 +220,8 @@ const HospitalFlow = {
   },
 
   // ---- Care Continuity Actions ----
-  toggleMedication(patientId, medName, timeSlot) {
-    CareEngine.acknowledgeMedication(patientId, medName, timeSlot);
+  toggleMedication(patientId, medName, timeSlot, planId = null) {
+    CareEngine.acknowledgeMedication(patientId, medName, timeSlot, planId);
     const user = Auth.getCurrentUser();
     if (user?.role === 'patient') {
       Router.navigate('/patient/care');
