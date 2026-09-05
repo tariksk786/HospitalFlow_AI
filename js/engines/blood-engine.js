@@ -25,10 +25,26 @@ const BloodEngine = {
     const duplicate = s.bloodRequests.find(r =>
       r.patientId === patientId &&
       r.bloodGroup === bloodGroup &&
-      !['Resolved', 'Issued'].includes(r.status)
+      !['Resolved', 'Issued', 'COMPLETED'].includes(r.status)
     );
     if (duplicate) {
-      throw new Error(`Active blood request already exists: ${duplicate.id}`);
+      appState.updateItem('bloodRequests', duplicate.id, {
+        units: parseInt(units),
+        urgency: urgency || 'Emergency',
+        status: 'Created',
+        updatedAt: new Date().toISOString()
+      });
+      eventBus.emit(EventTypes.BLOOD_REQUEST_CRITICAL, {
+        requestId: duplicate.id,
+        patientId,
+        patientName: patient?.displayName,
+        bloodGroup,
+        units: parseInt(units),
+        urgency: urgency || 'Emergency',
+        department,
+        component
+      }, { source: 'blood-engine', entityId: duplicate.id });
+      return duplicate;
     }
 
     requestCounter++;

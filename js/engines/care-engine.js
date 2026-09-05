@@ -166,6 +166,19 @@ const CareEngine = {
 
     appState.update({ medicationTracking: { ...tracking } });
 
+    // Update discharge plan medications
+    const plan = s.dischargePlans.find(dp => dp.patientId === patientId && dp.active);
+    if (plan && plan.medications) {
+      const med = plan.medications.find(m => m.name === medicationName && (!timeSlot || m.timeSlot === timeSlot));
+      if (med) {
+        med.taken = true;
+        med.skipped = false;
+        med.takenAt = new Date().toISOString();
+        med.takenTimeStr = nowStr;
+        appState.updateItem('dischargePlans', plan.id, { medications: [...plan.medications] });
+      }
+    }
+
     // Update related reminder
     const reminder = s.reminders.find(r =>
       r.patientId === patientId &&
@@ -227,6 +240,18 @@ const CareEngine = {
 
     appState.update({ medicationTracking: { ...tracking } });
 
+    // Update discharge plan medications
+    const plan = s.dischargePlans.find(dp => dp.patientId === patientId && dp.active);
+    if (plan && plan.medications) {
+      const med = plan.medications.find(m => m.name === medicationName && (!timeSlot || m.timeSlot === timeSlot));
+      if (med) {
+        med.taken = false;
+        med.skipped = true;
+        med.skipReason = reason;
+        appState.updateItem('dischargePlans', plan.id, { medications: [...plan.medications] });
+      }
+    }
+
     eventBus.emit(EventTypes.MEDICATION_MISSED, {
       patientName: patient?.displayName,
       patientId,
@@ -244,6 +269,43 @@ const CareEngine = {
       relatedModule: 'care',
       relatedEntityId: patientId
     });
+  },
+
+  /**
+   * Update Dietary Instructions and persist Care Plan
+   */
+  updateDietaryInstructions(patientId, dietaryInstructions, medName = null) {
+    const s = appState.get();
+    let plan = s.dischargePlans.find(dp => dp.patientId === patientId && dp.active);
+    if (plan) {
+      const updatedMeds = plan.medications ? [...plan.medications] : [];
+      if (medName && updatedMeds.length > 0) {
+        updatedMeds[0] = { ...updatedMeds[0], name: medName };
+      }
+      appState.updateItem('dischargePlans', plan.id, {
+        dietPlan: dietaryInstructions,
+        medications: updatedMeds,
+        updatedAt: new Date().toISOString()
+      });
+      plan = { ...plan, dietPlan: dietaryInstructions, medications: updatedMeds, updatedAt: new Date().toISOString() };
+    } else {
+      plan = this.createDischargePlan({
+        patientId,
+        approvedBy: s.currentUser?.doctorId || 'D-0001',
+        dietPlan: dietaryInstructions,
+        medications: [{ name: medName || 'Azithromycin 500mg', dosage: '1 Tablet', timeSlot: 'Morning', timing: '08:00 AM', instructions: 'After breakfast', taken: false }],
+        warningSigns: ['Fever rising above 101°F', 'Severe persistent breathlessness', 'Sudden acute dizziness or fainting']
+      });
+    }
+
+    eventBus.emit('CARE_PLAN_UPDATED', {
+      planId: plan.id,
+      patientId,
+      dietPlan: dietaryInstructions,
+      medications: plan.medications
+    }, { source: 'care-engine', entityId: plan.id });
+
+    return plan;
   },
 
   /**

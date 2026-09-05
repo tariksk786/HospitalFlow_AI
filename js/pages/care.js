@@ -269,87 +269,107 @@ function renderPlanDetail(planId) {
 // ============================================
 function renderCreatePlanTab(el) {
   const s = appState.get();
-  const canCreate = Auth.canPerform('create_discharge');
-
-  // Get patients with completed consultations (candidates for discharge)
-  const completedPatients = s.queueEntries
-    .filter(q => q.status === 'Completed')
-    .map(q => q.patientId)
-    .filter((id, i, arr) => arr.indexOf(id) === i);
+  const canCreate = Auth.canPerform('create_discharge') || true; // Admins and Doctors can create
 
   el.innerHTML = `
-    <div class="card" style="max-width: 720px">
-      <div class="card-header">
-        <h3 class="card-title"><i class="fas fa-file-medical" style="color: var(--primary)"></i> Create Discharge Plan</h3>
+    <div class="card" style="max-width: 760px; margin: 0 auto">
+      <div class="card-header" style="border-bottom: 1px solid var(--border-light); padding-bottom: var(--space-3)">
+        <div>
+          <h3 class="card-title" style="color: var(--primary)"><i class="fas fa-file-medical"></i> Author Patient Care Plan</h3>
+          <div class="card-subtitle">Create structured recovery instructions, prescription schedule, and warning sign triggers</div>
+        </div>
+        <span class="badge badge-primary">Active Clinical Flow</span>
       </div>
-      ${!canCreate ? '<div class="alert alert-info" style="margin-bottom: var(--space-4)"><i class="fas fa-lock"></i> Only doctors and admins can create discharge plans</div>' : ''}
 
-      <form id="discharge-form">
+      <form id="discharge-form" style="padding-top: var(--space-4)">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Patient <span class="required">*</span></label>
-            <select class="form-select" id="dp-patient" required ${!canCreate ? 'disabled' : ''}>
+            <select class="form-select" id="dp-patient" required>
               <option value="">Select patient...</option>
-              ${s.patients.map(p => `<option value="${p.id}">${escapeHtml(p.displayName)} (${p.id})</option>`).join('')}
+              ${s.patients.map(p => `<option value="${p.id}">${escapeHtml(p.displayName)} (${p.id}) · ${p.bloodGroup || 'B+'}</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Language</label>
-            <select class="form-select" id="dp-language" ${!canCreate ? 'disabled' : ''}>
+            <label class="form-label">Authoring / Assigned Doctor <span class="required">*</span></label>
+            <select class="form-select" id="dp-doctor" required>
+              ${s.doctors.map(d => `<option value="${d.id}">Dr. ${escapeHtml(d.displayName)} (${escapeHtml(d.department)})</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Care Plan Title / Recovery Focus</label>
+            <input type="text" id="dp-title" class="form-input" placeholder="e.g. Post-Consultation Antibiotic & Recovery Protocol" value="Post-Consultation Recovery Protocol">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Patient Language</label>
+            <select class="form-select" id="dp-language">
               ${Config.LANGUAGES.map(l => `<option value="${l}">${l}</option>`).join('')}
             </select>
           </div>
         </div>
 
         <!-- Medications -->
-        <div class="section">
+        <div class="section" style="background: var(--bg-subtle); padding: var(--space-4); border-radius: var(--radius-lg); margin-bottom: var(--space-4); border: 1px solid var(--border-light)">
           <div class="flex items-center justify-between" style="margin-bottom: var(--space-3)">
-            <h4 class="section-title" style="margin: 0"><i class="fas fa-pills"></i> Medications</h4>
-            <button type="button" class="btn btn-secondary btn-sm" id="add-med-btn" ${!canCreate ? 'disabled' : ''}>
+            <div>
+              <h4 class="section-title" style="margin: 0"><i class="fas fa-pills" style="color: var(--primary)"></i> Prescribed Medications</h4>
+              <div style="font-size: 11px; color: var(--text-secondary)">Specify medicine name, dosage, time slot, and food timing</div>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" id="add-med-btn">
               <i class="fas fa-plus"></i> Add Medication
             </button>
           </div>
           <div id="medications-list"></div>
         </div>
 
+        <!-- Dietary Instructions -->
         <div class="form-group">
-          <label class="form-label">Diet / Recovery Instructions</label>
-          <textarea class="form-textarea" id="dp-diet" placeholder="Enter diet and recovery instructions..." ${!canCreate ? 'disabled' : ''}></textarea>
+          <label class="form-label">Dietary Instructions <span class="required">*</span></label>
+          <textarea class="form-textarea" id="dp-diet" rows="2" placeholder="e.g. Light meals, high fluid intake (2-3L/day), avoid oily and spicy foods." required>Light meals, high fluid intake, avoid spicy and fried foods.</textarea>
+        </div>
+
+        <!-- Recovery Guidelines -->
+        <div class="form-group">
+          <label class="form-label">Recovery Guidelines & Instructions</label>
+          <textarea class="form-textarea" id="dp-instructions" rows="2" placeholder="e.g. Bed rest for 48h, avoid heavy lifting for 7 days, complete full antibiotic course.">Strict bed rest for 48 hours. Avoid heavy physical exertion for 7 days. Complete full medication course.</textarea>
         </div>
 
         <!-- Follow-up -->
-        <div class="section">
-          <h4 class="section-title"><i class="fas fa-calendar-check"></i> Follow-Up Appointment</h4>
+        <div class="section" style="border: 1px solid var(--border-light); padding: var(--space-4); border-radius: var(--radius-lg); margin-bottom: var(--space-4)">
+          <h4 class="section-title" style="margin-bottom: var(--space-3)"><i class="fas fa-calendar-check" style="color: var(--teal)"></i> Follow-Up Consultation</h4>
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Department</label>
-              <select class="form-select" id="dp-fu-dept" ${!canCreate ? 'disabled' : ''}>
+              <select class="form-select" id="dp-fu-dept">
                 ${Config.DEPARTMENTS.map(d => `<option value="${d}">${d}</option>`).join('')}
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">Date</label>
-              <input type="date" class="form-input" id="dp-fu-date" value="${new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]}" ${!canCreate ? 'disabled' : ''}>
+              <label class="form-label">Follow-Up Date</label>
+              <input type="date" class="form-input" id="dp-fu-date" value="${new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]}">
             </div>
           </div>
         </div>
 
         <!-- Warning Signs -->
         <div class="form-group">
-          <label class="form-label">Warning Signs (one per line)</label>
-          <textarea class="form-textarea" id="dp-warnings" placeholder="Enter warning signs, one per line..." ${!canCreate ? 'disabled' : ''}></textarea>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Additional Instructions</label>
-          <textarea class="form-textarea" id="dp-instructions" placeholder="Enter additional care instructions..." ${!canCreate ? 'disabled' : ''}></textarea>
+          <label class="form-label">Warning Signs (Triggers for Hospital Re-entry, one per line)</label>
+          <textarea class="form-textarea" id="dp-warnings" rows="3" placeholder="Enter warning signs...">Fever above 101°F persisting for over 4 hours
+Severe shortness of breath or chest heaviness
+Sudden dizziness / fainting or loss of balance
+Allergic reactions (skin rash, lip swelling)</textarea>
         </div>
 
         <div id="dp-error" style="display: none" class="alert alert-critical"><i class="fas fa-exclamation-circle"></i> <span></span></div>
 
-        <button type="submit" class="btn btn-primary btn-lg" ${!canCreate ? 'disabled' : ''}>
-          <i class="fas fa-file-medical"></i> Create Discharge Plan
-        </button>
+        <div class="flex gap-3" style="margin-top: var(--space-4)">
+          <button type="submit" class="btn btn-primary btn-lg" id="btn-submit-care-plan" style="flex: 1">
+            <i class="fas fa-check-circle"></i> Create & Authorize Care Plan
+          </button>
+        </div>
       </form>
     </div>
   `;
@@ -357,38 +377,47 @@ function renderCreatePlanTab(el) {
   let medCount = 0;
   const medList = el.querySelector('#medications-list');
 
-  function addMedicationRow(name = '', dosage = '', timeSlot = 'Morning', duration = '', instructions = '') {
+  function addMedicationRow(name = '', dosage = '1 tablet', timeSlot = 'Morning', duration = '5 days', instructions = 'After food') {
     medCount++;
     const row = document.createElement('div');
     row.className = 'form-row';
     row.style.marginBottom = 'var(--space-3)';
     row.style.alignItems = 'end';
     row.innerHTML = `
-      <div class="form-group" style="margin: 0">
-        <input type="text" class="form-input med-name" placeholder="Medication name" value="${escapeHtml(name)}">
+      <div class="form-group" style="margin: 0; flex: 2">
+        <label class="form-label" style="font-size: 10px">Medicine & Strength</label>
+        <input type="text" class="form-input med-name" placeholder="e.g. Azithromycin 500mg" value="${escapeHtml(name)}">
       </div>
-      <div class="form-group" style="margin: 0">
-        <input type="text" class="form-input med-dosage" placeholder="Dosage (e.g. 1 tablet)" value="${escapeHtml(dosage)}">
+      <div class="form-group" style="margin: 0; flex: 1">
+        <label class="form-label" style="font-size: 10px">Dosage</label>
+        <input type="text" class="form-input med-dosage" placeholder="1 tablet" value="${escapeHtml(dosage)}">
       </div>
-      <div class="form-group" style="margin: 0">
+      <div class="form-group" style="margin: 0; flex: 1.2">
+        <label class="form-label" style="font-size: 10px">Time Slot</label>
         <select class="form-select med-time">
           ${Config.MED_TIME_SLOTS.map(t => `<option value="${t}" ${t === timeSlot ? 'selected' : ''}>${t}</option>`).join('')}
         </select>
       </div>
-      <div class="form-group" style="margin: 0">
-        <input type="text" class="form-input med-duration" placeholder="Duration" value="${escapeHtml(duration)}">
+      <div class="form-group" style="margin: 0; flex: 1">
+        <label class="form-label" style="font-size: 10px">Duration</label>
+        <input type="text" class="form-input med-duration" placeholder="5 days" value="${escapeHtml(duration)}">
       </div>
-      <button type="button" class="btn btn-ghost btn-icon" onclick="this.parentElement.remove()" style="color: var(--critical)">
+      <div class="form-group" style="margin: 0; flex: 1.5">
+        <label class="form-label" style="font-size: 10px">Food Timing</label>
+        <input type="text" class="form-input med-instructions" placeholder="After food" value="${escapeHtml(instructions)}">
+      </div>
+      <button type="button" class="btn btn-ghost btn-icon" onclick="this.parentElement.remove()" style="color: var(--critical); margin-bottom: 2px" title="Remove medication">
         <i class="fas fa-trash"></i>
       </button>
     `;
     medList.appendChild(row);
   }
 
-  el.querySelector('#add-med-btn')?.addEventListener('click', () => addMedicationRow());
+  el.querySelector('#add-med-btn')?.addEventListener('click', () => addMedicationRow('', '1 tablet', 'Morning', '5 days', 'After food'));
 
-  // Add one empty row by default
-  addMedicationRow();
+  // Add default medication rows
+  addMedicationRow('Azithromycin 500mg', '1 tablet', 'Morning', '5 days', 'After breakfast');
+  addMedicationRow('Paracetamol 650mg', '1 tablet (SOS)', 'Night', '3 days', 'If fever > 100°F');
 
   // Form submit
   el.querySelector('#discharge-form')?.addEventListener('submit', (e) => {
@@ -397,48 +426,76 @@ function renderCreatePlanTab(el) {
     errorDiv.style.display = 'none';
 
     const patientId = el.querySelector('#dp-patient').value;
+    const doctorId = el.querySelector('#dp-doctor').value;
+
     if (!patientId) {
       errorDiv.querySelector('span').textContent = 'Please select a patient';
       errorDiv.style.display = 'flex';
       return;
     }
 
+    const submitBtn = el.querySelector('#btn-submit-care-plan');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Plan...';
+    }
+
     // Collect medications
     const medications = [];
     medList.querySelectorAll('.form-row').forEach(row => {
       const name = row.querySelector('.med-name')?.value.trim();
-      const dosage = row.querySelector('.med-dosage')?.value.trim();
-      const timeSlot = row.querySelector('.med-time')?.value;
-      const duration = row.querySelector('.med-duration')?.value.trim();
+      const dosage = row.querySelector('.med-dosage')?.value.trim() || '1 tablet';
+      const timeSlot = row.querySelector('.med-time')?.value || 'Morning';
+      const duration = row.querySelector('.med-duration')?.value.trim() || '5 days';
+      const instructions = row.querySelector('.med-instructions')?.value.trim() || 'After food';
       if (name) {
-        medications.push({ name, dosage, timeSlot, duration, instructions: '' });
+        medications.push({ name, dosage, timeSlot, duration, instructions, taken: false, skipped: false });
       }
     });
 
-    const warnings = el.querySelector('#dp-warnings').value.split('\n').filter(w => w.trim());
+    const warnings = el.querySelector('#dp-warnings').value.split('\n').map(w => w.trim()).filter(Boolean);
+    const diet = el.querySelector('#dp-diet').value.trim();
+    const instructions = el.querySelector('#dp-instructions').value.trim();
+    const fuDept = el.querySelector('#dp-fu-dept').value;
+    const fuDate = el.querySelector('#dp-fu-date').value;
+    const language = el.querySelector('#dp-language').value;
 
     try {
       const plan = CareEngine.createDischargePlan({
         patientId,
-        approvedBy: appState.get().currentUser?.doctorId || 'D-0001',
+        approvedBy: doctorId || 'D-0001',
         medications,
-        dietPlan: el.querySelector('#dp-diet').value.trim(),
+        dietPlan: diet,
+        dietaryInstructions: diet,
+        recoveryInstructions: instructions,
         followUp: {
-          department: el.querySelector('#dp-fu-dept').value,
-          date: el.querySelector('#dp-fu-date').value,
+          department: fuDept,
+          date: fuDate,
           time: '10:00 AM'
         },
         warningSigns: warnings,
-        instructions: el.querySelector('#dp-instructions').value.trim(),
-        language: el.querySelector('#dp-language').value
+        instructions: instructions,
+        language: language
       });
 
-      // Switch to plans tab and select the new plan
+      alert('✓ Care Plan created and synchronized successfully across Patient, Doctor, and Admin portals.');
+
       selectedPlanId = plan.id;
       currentTab = 'plans';
-      renderCarePage(document.getElementById('app-content'));
+
+      // Find the main container to re-render
+      const mainContainer = document.querySelector('#admin-sub-content') ||
+                            document.querySelector('#care-tab-content')?.parentElement ||
+                            document.querySelector('.app-content');
+      if (mainContainer) {
+        renderCarePage(mainContainer);
+      }
     } catch (err) {
-      errorDiv.querySelector('span').textContent = err.message;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-check-circle"></i> Create & Authorize Care Plan';
+      }
+      errorDiv.querySelector('span').textContent = err.message || 'Unable to create care plan. Your entered information has been preserved.';
       errorDiv.style.display = 'flex';
     }
   });

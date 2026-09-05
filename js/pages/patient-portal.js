@@ -19,6 +19,25 @@ import { escapeHtml, formatMinutes, formatTime, formatDate, timeAgo, getInitials
 let bookingSymptomAnalysis = null;
 let selectedSymptomCodes = [];
 
+// Persistent zero-loss emergency form state
+let emergencyFormState = {
+  self: {
+    symptoms: '',
+    severity: 'Critical',
+    eta: '14',
+    consciousness: 'Conscious',
+    breathing: 'None',
+    bleeding: 'No',
+    phone: ''
+  },
+  ambulance: {
+    pickupLoc: '',
+    phone: '',
+    symptoms: '',
+    severity: 'Critical'
+  }
+};
+
 export function renderPatientPortal(container, subRoute = 'home') {
   const user = Auth.getCurrentUser();
   if (!user || user.role !== 'patient') {
@@ -202,6 +221,12 @@ export function renderPatientPortal(container, subRoute = 'home') {
   // Reactive subscription for zero-refresh operational synchronization
   const unsubscribeState = appState.subscribe(() => {
     if (document.body.contains(subContentEl)) {
+      if (subRoute === 'emergency-status') {
+        const active = document.activeElement;
+        if (active && (active.id?.startsWith('pre-') || active.id?.startsWith('amb-'))) {
+          return; // Avoid destroying form while user is actively entering emergency information
+        }
+      }
       renderCurrentSubRoute();
     }
   });
@@ -351,100 +376,77 @@ function renderPatientHome(el, patient) {
           </div>
         </div>
 
-        <!-- Right Column: Live Queue & Medication -->
+        <!-- Right Column: Queue & Care Shortcuts -->
         <div class="flex flex-col gap-6">
-          <!-- Live Queue Card -->
-          <div class="patient-queue-card">
+          <!-- Queue Status Card -->
+          <div class="card">
             <div class="card-header">
               <div>
-                <h3 class="card-title">Live Queue</h3>
-                <div class="card-subtitle">Updated continuously</div>
+                <h3 class="card-title">${t('nav.queue') || 'Live Queue Status'}</h3>
+                <div class="card-subtitle">Your position in hospital flow</div>
               </div>
-              <span class="badge ${activeQueue ? 'badge-warning' : 'badge-neutral'}">
-                <i class="fas ${activeQueue ? 'fa-clock' : 'fa-check'}"></i> ${activeQueue ? activeQueue.status : 'Not in Queue'}
+              <span class="badge ${activeQueue ? 'badge-primary' : 'badge-neutral'}">
+                ${activeQueue ? activeQueue.status : 'Not in Queue'}
               </span>
             </div>
 
             ${activeQueue ? `
-              <div class="queue-metrics-grid">
-                <div class="queue-metric-item">
-                  <span class="queue-metric-label">Your Token</span>
-                  <span class="queue-token-value">${activeQueue.id}</span>
+              <div class="queue-status-box" style="background: var(--primary-50); padding: var(--space-4); border-radius: var(--radius-lg); border: 1px solid var(--primary-200); margin-bottom: var(--space-4)">
+                <div class="flex justify-between items-center">
+                  <div>
+                    <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">Token Number</div>
+                    <div style="font-size: 28px; font-weight: 800; color: var(--primary)">${activeQueue.id}</div>
+                  </div>
+                  <div style="text-align: right">
+                    <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">Est. Wait</div>
+                    <div style="font-size: 24px; font-weight: 700; color: var(--warning)">${formatMinutes(activeQueue.estimatedWait || 15)}</div>
+                  </div>
                 </div>
-                <div class="queue-metric-item">
-                  <span class="queue-metric-label">Position</span>
-                  <span class="queue-metric-val">#${activeQueue.position}</span>
-                </div>
-                <div class="queue-metric-item">
-                  <span class="queue-metric-label">Ahead</span>
-                  <span class="queue-metric-val">${Math.max(0, activeQueue.position - 1)}</span>
-                </div>
-                <div class="queue-metric-item">
-                  <span class="queue-metric-label">Predicted Wait</span>
-                  <span class="queue-metric-val" style="color: var(--primary)">${formatMinutes(activeQueue.estimatedWait || 0)}</span>
+                <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: var(--space-2)">
+                  Patients ahead: <strong>${Math.max(0, (activeQueue.position || 1) - 1)}</strong> · Room: <strong>${activeQueue.room || '102'}</strong>
                 </div>
               </div>
-
-              <!-- Horizontal Progress Track -->
-              <div class="queue-progress-track">
-                <div class="queue-progress-bar-bg"></div>
-                <div class="queue-progress-bar-active" style="width: ${activeQueue.status === 'Consulting' ? '100%' : activeQueue.status === 'Called' ? '75%' : '35%'}"></div>
-                <div class="queue-step-node completed"><i class="fas fa-check"></i></div>
-                <div class="queue-step-node ${activeQueue.status !== 'Waiting' ? 'completed' : 'active'}"><i class="fas fa-user-clock"></i></div>
-                <div class="queue-step-node ${activeQueue.status === 'Consulting' ? 'completed' : activeQueue.status === 'Called' ? 'active' : ''}"><i class="fas fa-bullhorn"></i></div>
-                <div class="queue-step-node ${activeQueue.status === 'Consulting' ? 'active' : ''}"><i class="fas fa-stethoscope"></i></div>
-              </div>
-              <div class="flex justify-between" style="font-size: 10px; color: var(--text-tertiary); margin-top: -8px">
-                <span>Checked in</span>
-                <span>Your consultation</span>
-              </div>
-
-              <div style="margin-top: var(--space-4); border-top: 1px solid var(--border-light); padding-top: var(--space-3)">
-                <a href="#/patient/queue" style="font-size: var(--font-size-xs); font-weight: 600; color: var(--primary); display: inline-flex; align-items: center; gap: 4px">
-                  Open live queue <i class="fas fa-arrow-right" style="font-size: 10px"></i>
-                </a>
-              </div>
+              <button class="btn btn-secondary btn-sm" style="width: 100%" onclick="window.HospitalFlow.router.navigate('/patient/queue')">
+                <i class="fas fa-list-ol"></i> View Full Live Queue
+              </button>
             ` : `
-              <div class="empty-state" style="padding: var(--space-6)">
-                <i class="fas fa-ticket-alt"></i>
-                <h4>Not currently in queue</h4>
-                <p>Check in for your scheduled appointment to get a live token.</p>
+              <div class="empty-state" style="padding: var(--space-4)">
+                <p style="margin-bottom: var(--space-2)">You are not currently in an active doctor queue.</p>
+                <button class="btn btn-ghost btn-sm" onclick="window.HospitalFlow.router.navigate('/patient/appointments')">
+                  View Appointments & Check-in
+                </button>
               </div>
             `}
           </div>
 
-          <!-- Next Medication Card -->
-          <div class="patient-med-card">
+          <!-- My Care Shortcut -->
+          <div class="card">
             <div class="card-header">
               <div>
-                <h3 class="card-title">Next Medication</h3>
-                <div class="card-subtitle">Today's schedule</div>
+                <h3 class="card-title">${t('nav.care') || 'My Care & Medications'}</h3>
+                <div class="card-subtitle">Active prescriptions & instructions</div>
               </div>
-              <span class="badge ${activePlan ? 'badge-success' : 'badge-neutral'}">${activePlan ? 'Plan Active' : 'None'}</span>
+              <span class="badge ${activePlan ? 'badge-success' : 'badge-neutral'}">
+                ${activePlan ? 'Active Plan' : 'No Plan'}
+              </span>
             </div>
 
-            ${nextMed ? `
-              <div class="med-schedule-item">
-                <div class="med-icon-box"><i class="fas fa-pills"></i></div>
-                <div style="flex: 1">
-                  <div style="font-size: 11px; color: var(--text-secondary); font-weight: 600">${nextMed.timeSlot} · 02:00 PM</div>
-                  <div style="font-size: var(--font-size-sm); font-weight: 700; color: var(--text-primary)">${escapeHtml(nextMed.name)}</div>
-                  <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">${escapeHtml(nextMed.dosage)} · ${escapeHtml(nextMed.instructions || 'After Food')}</div>
+            ${activePlan && nextMed ? `
+              <div class="med-item" style="margin-bottom: var(--space-3)">
+                <div class="med-check ${nextMed.taken ? 'checked' : ''}" onclick="window.HospitalFlow.toggleMedication('${patient.id}', '${nextMed.name}', '${nextMed.timeSlot}')">
+                  <i class="fas fa-check"></i>
+                </div>
+                <div class="med-info">
+                  <div class="med-name">${escapeHtml(nextMed.name)}</div>
+                  <div class="med-dose">${escapeHtml(nextMed.dosage)} · ${escapeHtml(nextMed.timeSlot)} (${escapeHtml(nextMed.timing || 'Slot')})</div>
                 </div>
               </div>
-
-              <div class="flex items-center gap-2">
-                <button class="btn btn-success btn-sm" onclick="window.HospitalFlow.toggleMedication('${patient.id}', '${nextMed.name}', '${nextMed.timeSlot}')">
-                  <i class="fas fa-check"></i> Mark Taken
-                </button>
-                <a href="#/patient/care" style="font-size: var(--font-size-xs); font-weight: 600; color: var(--primary); margin-left: auto">
-                  Open My Care
-                </a>
-              </div>
+              <button class="btn btn-secondary btn-sm" style="width: 100%" onclick="window.HospitalFlow.router.navigate('/patient/care')">
+                <i class="fas fa-pills"></i> Open Recovery Workspace
+              </button>
             ` : `
               <div class="empty-state" style="padding: var(--space-4)">
-                <i class="fas fa-clipboard-check"></i>
-                <p>No active medications prescribed.</p>
+                <p>No active care plan prescribed at this time.</p>
               </div>
             `}
           </div>
@@ -455,7 +457,7 @@ function renderPatientHome(el, patient) {
 }
 
 // ============================================
-// PATIENT APPOINTMENTS VIEW
+// PATIENT APPOINTMENTS TAB
 // ============================================
 function renderPatientAppointments(el, patient) {
   const s = appState.get();
@@ -464,339 +466,185 @@ function renderPatientAppointments(el, patient) {
     .sort((a, b) => new Date(b.scheduledTime) - new Date(a.scheduledTime));
 
   el.innerHTML = `
-    <div class="patient-appointments-layout animate-fade-in">
-      <div id="patient-booking-persistent-confirmation" style="display: none; margin-bottom: var(--space-6)"></div>
-
-      <div class="grid-2">
-        <!-- 1. Symptom Guided Booking Form -->
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <h3 class="card-title"><i class="fas fa-notes-medical" style="color: var(--primary)"></i> Symptom-Guided Booking</h3>
-              <div class="card-subtitle">Describe symptoms in English, Hindi, or Hinglish</div>
-            </div>
-          </div>
-
-          <form id="symptom-booking-form">
-            <div class="form-group">
-              <label class="form-label">Describe your symptoms <span class="required">*</span></label>
-              <textarea id="symptom-input-text" class="form-textarea" rows="3" placeholder="e.g. mujhe bukhar aur khansi hai..." required></textarea>
-            </div>
-
-            <button type="button" class="btn btn-secondary btn-sm" id="btn-analyze-symptoms" style="margin-bottom: var(--space-3)">
-              <i class="fas fa-magic"></i> Analyze Symptoms
-            </button>
-
-            <!-- Detected Symptoms & Chips -->
-            <div id="detected-symptoms-box" class="card-inner-box" style="display: none">
-              <div class="flex justify-between items-center" style="margin-bottom: 6px">
-                <span style="font-size: var(--font-size-xs); font-weight: 600; color: var(--text-secondary)">Detected Symptoms:</span>
-                <span class="badge badge-success" id="symptom-confidence-badge">High Confidence</span>
-              </div>
-              <div id="symptom-chips-list" class="flex flex-wrap gap-1"></div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Department <span class="required">*</span></label>
-                <select id="apt-dept-select" class="form-select" required>
-                  ${Config.DEPARTMENTS.map(d => `<option value="${d}">${d}</option>`).join('')}
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Doctor <span class="required">*</span></label>
-                <select id="apt-doctor-select" class="form-select" required></select>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Preferred Date <span class="required">*</span></label>
-                <input type="date" id="apt-date" class="form-input" value="${new Date().toISOString().split('T')[0]}" min="${new Date().toISOString().split('T')[0]}" required>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Time Slot <span class="required">*</span></label>
-                <select id="apt-time" class="form-select" required>
-                  <option value="">Next Available Slot</option>
-                </select>
-              </div>
-            </div>
-
-            <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: var(--space-2)">
-              <i class="fas fa-check-circle"></i> Confirm & Book Appointment
-            </button>
-          </form>
+    <div class="patient-apts-layout animate-fade-in">
+      <div class="flex justify-between items-center" style="margin-bottom: var(--space-4)">
+        <div>
+          <h2 style="margin: 0; font-size: var(--font-size-xl)">${t('patient.appointments_title') || 'Your Consultations'}</h2>
+          <p style="margin: 0; font-size: var(--font-size-xs); color: var(--text-secondary)">Manage bookings, check-in QR codes, and clinical consultations</p>
         </div>
+        <button class="btn btn-primary btn-sm" onclick="window._showBookAppointmentModal('${patient.id}')">
+          <i class="fas fa-plus"></i> ${t('patient.book_new_apt') || 'Book New Consultation'}
+        </button>
+      </div>
 
-        <!-- 2. Upcoming & Past Appointments -->
-        <div class="card">
-          <div class="card-header flex justify-between items-center">
-            <h3 class="card-title"><i class="fas fa-history"></i> My Appointments (${myApts.length})</h3>
-          </div>
+      ${myApts.length > 0 ? `
+        <div class="grid-2" style="gap: var(--space-4)">
+          ${myApts.map(apt => {
+            const doc = s.doctors.find(d => d.id === apt.doctorId);
+            const isToday = new Date(apt.scheduledTime).toDateString() === new Date().toDateString();
 
-          <div class="appointments-feed" style="margin-top: var(--space-3)">
-            ${myApts.map(apt => {
-              const doc = s.doctors.find(d => d.id === apt.doctorId);
-              const isScheduled = apt.status === 'Scheduled';
-              return `
-                <div class="card-inner-box" style="margin-bottom: var(--space-3); background: var(--bg-surface); border: 1px solid var(--border)">
-                  <div class="flex justify-between items-center">
-                    <div>
-                      <strong style="font-size: var(--font-size-md)">${escapeHtml(apt.department)}</strong>
-                      <span class="badge ${isScheduled ? 'badge-info' : 'badge-success'}" style="margin-left: 6px">${apt.status}</span>
-                    </div>
-                    <span style="font-size: var(--font-size-xs); color: var(--text-tertiary)">${apt.id}</span>
+            return `
+              <div class="card apt-item-card">
+                <div class="flex justify-between items-start" style="margin-bottom: var(--space-3)">
+                  <div>
+                    <span class="badge ${apt.status === 'Scheduled' ? 'badge-primary' : apt.status === 'Completed' ? 'badge-success' : 'badge-neutral'}">${apt.status}</span>
+                    <h3 style="margin: var(--space-2) 0 2px; font-size: var(--font-size-md)">${escapeHtml(apt.department)}</h3>
+                    <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">Dr. ${escapeHtml(doc?.displayName || 'Physician')}</div>
                   </div>
-                  <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin: 4px 0">
-                    Dr. ${escapeHtml(doc?.displayName || 'Physician')} · ${formatDate(apt.scheduledTime)} at ${formatTime(apt.scheduledTime)}
-                  </div>
-                  <div class="flex gap-2" style="margin-top: var(--space-3)">
-                    <button class="btn btn-secondary btn-sm" onclick="window._showAppointmentQRModal('${apt.id}')">
-                      <i class="fas fa-qrcode"></i> Show QR
-                    </button>
-                    ${isScheduled ? `
-                      <button class="btn btn-primary btn-sm" onclick="window.HospitalFlow.checkInPatient('${apt.id}')">
-                        <i class="fas fa-check"></i> Check-In Now
-                      </button>
-                    ` : ''}
+                  <div style="text-align: right">
+                    <div style="font-weight: 700; font-size: var(--font-size-md); color: var(--primary)">${formatTime(apt.scheduledTime)}</div>
+                    <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">${formatDate(apt.scheduledTime)}</div>
                   </div>
                 </div>
-              `;
-            }).join('')}
-          </div>
+
+                <div class="card-inner-box" style="background: var(--bg-subtle); margin: var(--space-3) 0">
+                  <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">Reported Symptoms:</div>
+                  <div style="font-weight: 600; font-size: var(--font-size-xs); color: var(--text)">"${escapeHtml(apt.symptom_original_text || 'General Checkup')}"</div>
+                  <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px">
+                    Normalized: <strong>${(apt.normalized_symptoms || []).join(', ') || 'Routine'}</strong>
+                  </div>
+                </div>
+
+                <div class="flex gap-2" style="margin-top: var(--space-3)">
+                  ${apt.status === 'Scheduled' ? `
+                    <button class="btn btn-primary btn-sm" style="flex: 1" onclick="window.HospitalFlow.checkInPatient('${apt.id}')">
+                      <i class="fas fa-check"></i> Check In
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="window._showAppointmentQRModal('${apt.id}')">
+                      <i class="fas fa-qrcode"></i> QR
+                    </button>
+                  ` : `
+                    <button class="btn btn-ghost btn-sm" style="flex: 1" onclick="window._showAppointmentDetailsModal('${apt.id}')">
+                      <i class="fas fa-info-circle"></i> Details
+                    </button>
+                  `}
+                </div>
+              </div>
+            `;
+          }).join('')}
         </div>
-      </div>
+      ` : `
+        <div class="card empty-state" style="padding: var(--space-8)">
+          <i class="fas fa-calendar-times"></i>
+          <h3>No consultations found</h3>
+          <p>You have not scheduled any clinical consultations yet.</p>
+          <button class="btn btn-primary btn-sm" onclick="window._showBookAppointmentModal('${patient.id}')">
+            <i class="fas fa-plus"></i> Book Consultation
+          </button>
+        </div>
+      `}
     </div>
   `;
-
-  // Booking handlers
-  const deptSelect = el.querySelector('#apt-dept-select');
-  const docSelect = el.querySelector('#apt-doctor-select');
-  const timeSelect = el.querySelector('#apt-time');
-  const symptomInput = el.querySelector('#symptom-input-text');
-  const analyzeBtn = el.querySelector('#btn-analyze-symptoms');
-
-  function updateDoctorsForDept(dept) {
-    const docs = s.doctors.filter(d => d.department === dept);
-    docSelect.innerHTML = docs.map(d => `<option value="${d.id}">Dr. ${escapeHtml(d.displayName)} (${d.specialty})</option>`).join('');
-    updateTimeSlots();
-  }
-
-  function updateTimeSlots() {
-    const docId = docSelect.value;
-    const date = el.querySelector('#apt-date').value;
-    if (!docId || !date) return;
-    const slots = FlowEngine.getAvailableSlots(docId, date);
-    timeSelect.innerHTML = '<option value="">Next Available Slot</option>' + slots.slice(0, 8).map(slot => `<option value="${slot}">${formatTime(slot)}</option>`).join('');
-  }
-
-  deptSelect?.addEventListener('change', (e) => updateDoctorsForDept(e.target.value));
-  el.querySelector('#apt-date')?.addEventListener('change', updateTimeSlots);
-
-  analyzeBtn?.addEventListener('click', () => {
-    const text = symptomInput.value.trim();
-    if (!text) return;
-    bookingSymptomAnalysis = SymptomNormalizer.normalize(text);
-    selectedSymptomCodes = [...bookingSymptomAnalysis.normalizedSymptoms];
-
-    const chipsBox = el.querySelector('#detected-symptoms-box');
-    const chipsList = el.querySelector('#symptom-chips-list');
-    chipsBox.style.display = 'block';
-    chipsList.innerHTML = selectedSymptomCodes.map(code => `<span class="symptom-chip active">${code}</span>`).join('');
-
-    if (bookingSymptomAnalysis.suggestedDepartment) {
-      deptSelect.value = bookingSymptomAnalysis.suggestedDepartment;
-      updateDoctorsForDept(deptSelect.value);
-    }
-  });
-
-  updateDoctorsForDept(deptSelect.value);
-
-  el.querySelector('#symptom-booking-form')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    try {
-      const dept = deptSelect.value;
-      const docId = docSelect.value;
-      const date = el.querySelector('#apt-date').value || new Date().toISOString().split('T')[0];
-      const timeVal = timeSelect.value;
-      
-      let scheduledTime;
-      if (timeVal) {
-        scheduledTime = timeVal;
-      } else {
-        const d = new Date(date);
-        d.setHours(10, 30, 0, 0);
-        scheduledTime = d.toISOString();
-      }
-
-      if (!docId) {
-        alert('Please select a doctor.');
-        return;
-      }
-
-      const result = FlowEngine.bookAppointment({
-        patientId: patient.id,
-        doctorId: docId,
-        department: dept,
-        scheduledTime
-      });
-
-      if (result && result.appointment) {
-        appState.updateItem('appointments', result.appointment.id, {
-          symptom_original_text: symptomInput.value.trim(),
-          normalized_symptoms: selectedSymptomCodes
-        });
-      }
-
-      renderPatientAppointments(el, patient);
-
-      // Show persistent confirmation banner with QR
-      const confirmBox = el.querySelector('#patient-booking-persistent-confirmation');
-      if (confirmBox && result && result.appointment) {
-        confirmBox.style.display = 'block';
-        confirmBox.innerHTML = `
-          <div class="card" style="border: 2px solid var(--primary); background: rgba(37, 99, 235, 0.05); padding: var(--space-4); border-radius: var(--radius-lg)">
-            <div class="flex items-center justify-between" style="flex-wrap: wrap; gap: 12px">
-              <div class="flex items-center gap-3">
-                <div style="width: 44px; height: 44px; border-radius: 50%; background: #22c55e; color: white; display: flex; align-items: center; justify-content: center; font-size: 20px">
-                  <i class="fas fa-check"></i>
-                </div>
-                <div>
-                  <h4 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary)">Appointment Confirmed (${result.appointment.id})</h4>
-                  <p style="margin: 0; font-size: 12px; color: var(--text-secondary)">Your appointment with Dr. ${docSelect.options[docSelect.selectedIndex]?.text || 'Physician'} has been confirmed.</p>
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <button class="btn btn-secondary btn-sm" onclick="window._showAppointmentQRModal('${result.appointment.id}')">
-                  <i class="fas fa-qrcode"></i> View QR
-                </button>
-                <button class="btn btn-primary btn-sm" onclick="window.HospitalFlow.checkInPatient('${result.appointment.id}')">
-                  <i class="fas fa-sign-in-alt"></i> Express Check-In Now
-                </button>
-              </div>
-            </div>
-          </div>
-        `;
-        confirmBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    } catch (err) {
-      console.error('Appointment booking error:', err);
-      alert(err.message || 'Unable to book appointment.');
-    }
-  });
 }
 
 // ============================================
-// PATIENT LIVE QUEUE
+// PATIENT LIVE QUEUE TAB
 // ============================================
 function renderPatientQueue(el, patient) {
   const s = appState.get();
-  const queueEntry = s.queueEntries.find(q => q.patientId === patient.id && ['Waiting', 'Called', 'Consulting'].includes(q.status));
-
-  if (!queueEntry) {
-    el.innerHTML = `
-      <div class="card" style="max-width: 540px; margin: var(--space-6) auto; text-align: center">
-        <div class="empty-state" style="padding: var(--space-8)">
-          <i class="fas fa-ticket-alt" style="font-size: 36px; color: var(--text-tertiary)"></i>
-          <h3>Not currently in queue</h3>
-          <p>Check in for your scheduled appointment to receive a live token.</p>
-          <button class="btn btn-primary" onclick="window.HospitalFlow.router.navigate('/patient/appointments')">
-            <i class="fas fa-calendar-check"></i> My Appointments
-          </button>
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  const assignedDoc = s.doctors.find(d => d.id === queueEntry.doctorId);
-  const hasEmergencyDisruption = (s.emergencyCases || []).some(c => (c.department === queueEntry.department || c.doctorId === queueEntry.doctorId) && c.status !== 'COMPLETED');
+  const myQueue = s.queueEntries.find(q => q.patientId === patient.id && ['Waiting', 'Called', 'Consulting'].includes(q.status));
 
   el.innerHTML = `
-    <div class="patient-queue-layout animate-fade-in" style="max-width: 680px; margin: 0 auto">
-      <div class="card">
-        <div style="text-align: center; padding: var(--space-6); background: linear-gradient(145deg, #1D63ED 0%, #0284C7 100%); color: white; border-radius: var(--radius-xl)">
-          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.9">LIVE TOKEN</div>
-          <div style="font-size: 44px; font-weight: 800; margin: 2px 0">${queueEntry.id}</div>
-          <div style="font-size: var(--font-size-sm); opacity: 0.95">${escapeHtml(queueEntry.department)} · Dr. ${escapeHtml(assignedDoc?.displayName || '')}</div>
-        </div>
+    <div class="patient-queue-layout animate-fade-in" style="max-width: 800px; margin: 0 auto">
+      ${myQueue ? `
+        <div class="card" style="border-top: 4px solid var(--primary); margin-bottom: var(--space-6)">
+          <div class="card-header flex justify-between items-center">
+            <div>
+              <h2 style="margin: 0; font-size: var(--font-size-xl)">Live Queue Tracker</h2>
+              <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">Department: <strong>${escapeHtml(myQueue.department)}</strong></div>
+            </div>
+            <span class="badge ${myQueue.status === 'Called' ? 'badge-warning animate-pulse' : myQueue.status === 'Consulting' ? 'badge-success' : 'badge-primary'}" style="font-size: 12px; padding: 6px 14px">
+              ${myQueue.status === 'Called' ? 'PLEASE ENTER ROOM' : myQueue.status === 'Consulting' ? 'IN CONSULTATION' : 'WAITING IN QUEUE'}
+            </span>
+          </div>
 
-        <!-- Privacy-Safe Emergency Delay Notification Banner (Requirement 11) -->
-        ${hasEmergencyDisruption ? `
-          <div class="card-inner-box animate-fade-in" style="background: #FFFBEB; border: 1px solid #FCD34D; margin: var(--space-4) 0 0; border-radius: var(--radius-md); padding: var(--space-3)">
-            <div class="flex items-center gap-2" style="color: #92400E; font-weight: 700; font-size: var(--font-size-sm); margin-bottom: 2px">
-              <i class="fas fa-exclamation-circle"></i> Priority Triage Operational Notice
+          <div class="grid-3" style="margin: var(--space-5) 0">
+            <div class="metric-card">
+              <div class="kpi-icon blue"><i class="fas fa-ticket-alt"></i></div>
+              <div class="kpi-content">
+                <div class="kpi-label">Your Token</div>
+                <div class="kpi-value">${myQueue.id}</div>
+                <div class="kpi-meta">Position: #${myQueue.position}</div>
+              </div>
             </div>
-            <p style="font-size: var(--font-size-xs); color: #78350F; margin: 0; line-height: 1.5">
-              An emergency case has affected your department. Your updated estimated wait is approximately <strong>${formatMinutes(queueEntry.estimatedWait || 27)}</strong>. Hospital clinical staff are actively balancing throughput.
-            </p>
-          </div>
-        ` : ''}
 
-        <div class="grid-3" style="margin: var(--space-5) 0">
-          <div class="metric-card">
-            <div class="kpi-icon blue"><i class="fas fa-list-ol"></i></div>
-            <div class="kpi-content">
-              <div class="kpi-label">Position</div>
-              <div class="kpi-value">#${queueEntry.position}</div>
+            <div class="metric-card">
+              <div class="kpi-icon orange"><i class="fas fa-users"></i></div>
+              <div class="kpi-content">
+                <div class="kpi-label">Patients Ahead</div>
+                <div class="kpi-value">${Math.max(0, myQueue.position - 1)}</div>
+                <div class="kpi-meta">Avg: 6m / patient</div>
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="kpi-icon green"><i class="fas fa-door-open"></i></div>
+              <div class="kpi-content">
+                <div class="kpi-label">Consultation Room</div>
+                <div class="kpi-value">${myQueue.room || '102'}</div>
+                <div class="kpi-meta">OPD Wing B</div>
+              </div>
             </div>
           </div>
-          <div class="metric-card">
-            <div class="kpi-icon orange"><i class="fas fa-users"></i></div>
-            <div class="kpi-content">
-              <div class="kpi-label">Patients Ahead</div>
-              <div class="kpi-value">${Math.max(0, queueEntry.position - 1)}</div>
-            </div>
-          </div>
-          <div class="metric-card">
-            <div class="kpi-icon green"><i class="fas fa-clock"></i></div>
-            <div class="kpi-content">
-              <div class="kpi-label">Predicted Wait</div>
-              <div class="kpi-value">${queueEntry.estimatedWait != null ? formatMinutes(queueEntry.estimatedWait) : '0m'}</div>
+
+          <div class="card-inner-box" style="background: #EFF6FF; border: 1px solid #BFDBFE">
+            <div class="flex items-center gap-3">
+              <div style="font-size: 24px; color: var(--primary)"><i class="fas fa-info-circle"></i></div>
+              <div>
+                <strong style="color: #1E40AF">Estimated Consultation Start:</strong>
+                <div style="font-size: var(--font-size-sm); color: #1E3A8A">
+                  Expected in ~${myQueue.estimatedWait || 12} minutes. Please remain seated near Room ${myQueue.room || '102'}.
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      ` : `
+        <div class="card empty-state" style="padding: var(--space-8)">
+          <i class="fas fa-check-circle" style="color: var(--success); font-size: 48px"></i>
+          <h3>No active queue entry</h3>
+          <p>You have not checked in to any consultation queues today.</p>
+          <button class="btn btn-primary btn-sm" onclick="window.HospitalFlow.router.navigate('/patient/appointments')">
+            View Appointments
+          </button>
+        </div>
+      `}
     </div>
   `;
 }
 
 // ============================================
-// PATIENT MY CARE & RECOVERY WORKSPACE (Phase 2)
+// PATIENT MY CARE & RECOVERY WORKSPACE
 // ============================================
 function renderPatientCare(el, patient) {
   const s = appState.get();
-  const plan = s.dischargePlans.find(dp => dp.patientId === patient.id && dp.active) || {
+  const plan = s.dischargePlans.find(dp => dp.patientId === patient.id && dp.active) || s.dischargePlans[0] || {
     id: 'DP-2048',
     patientId: patient.id,
-    doctorId: 'D-0001',
-    doctorName: 'Dr. Aarav Sharma',
-    department: 'General Medicine',
-    dischargeDate: new Date(Date.now() - 86400000).toISOString(),
-    recoveryDay: 4,
-    totalRecoveryDays: 7,
     active: true,
     medications: [
-      { name: 'Azithromycin 250mg', dosage: '1 Tablet', timeSlot: 'Morning', timing: '08:00 AM', instructions: 'After breakfast', taken: true, takenTimeStr: '08:04 AM' },
-      { name: 'Paracetamol 650mg', dosage: '1 Tablet', timeSlot: 'Afternoon', timing: '02:00 PM', instructions: 'After lunch', taken: false, skipped: true, skipReason: 'Feeling Unwell' },
-      { name: 'Multivitamin Complex', dosage: '1 Capsule', timeSlot: 'Evening', timing: '06:00 PM', instructions: 'With warm water', taken: false },
-      { name: 'Pantoprazole 40mg', dosage: '1 Tablet', timeSlot: 'Night', timing: '09:00 PM', instructions: '30 mins before dinner', taken: false }
+      { name: 'Azithromycin 500mg', dosage: '1 tablet', timeSlot: 'Morning', timing: 'Morning (08:00 AM)', duration: '5 days', instructions: 'After breakfast', taken: true, takenTimeStr: '08:04 AM' },
+      { name: 'Paracetamol 650mg', dosage: '1 tablet (SOS)', timeSlot: 'Afternoon', timing: 'Afternoon (01:00 PM)', duration: '3 days', instructions: 'After food', taken: false, skipped: false },
+      { name: 'Vitamin C 500mg', dosage: '1 tablet', timeSlot: 'Evening', timing: 'Evening (08:00 PM)', duration: '7 days', instructions: 'After dinner', taken: false, skipped: false }
     ],
-    dietPlan: 'Light fluids, high-protein khichdi, avoid oily foods, warm water hydration',
-    warningSigns: ['Fever rising above 101°F', 'Severe persistent breathlessness', 'Sudden acute dizziness or fainting'],
-    followUpDate: '2026-09-12T10:00:00'
+    dietPlan: 'Light meals, high fluid intake, avoid spicy foods.',
+    dietaryInstructions: 'Light meals, high fluid intake, avoid spicy foods.',
+    instructions: 'Strict bed rest for 48 hours. Avoid heavy physical lifting. Resume routine activities gradually.',
+    recoveryInstructions: 'Strict bed rest for 48 hours. Avoid heavy physical lifting. Resume routine activities gradually.',
+    warningSigns: ['Fever above 101°F persisting for over 4 hours', 'Severe shortness of breath or chest heaviness', 'Sudden dizziness / fainting or loss of balance', 'Allergic reactions (skin rash, lip swelling)'],
+    followUp: { department: 'General Medicine', date: 'In 7 Days', time: '10:00 AM' }
   };
 
-  const adherence = CareEngine.getAdherence(patient.id);
   const meds = plan.medications || [];
   const takenCount = meds.filter(m => m.taken).length;
   const skippedCount = meds.filter(m => m.skipped).length;
-  const nextScheduledMed = meds.find(m => !m.taken && !m.skipped) || meds[0];
+  const nextScheduledMed = meds.find(m => !m.taken && !m.skipped) || null;
+  const adherence = CareEngine.getAdherence(patient.id);
 
   el.innerHTML = `
-    <div class="patient-care-layout animate-fade-in" style="max-width: 920px; margin: 0 auto">
-      <!-- 1. Top Clinical Recovery Header Card -->
-      <div class="card" style="margin-bottom: var(--space-5); background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%); border: 1px solid var(--primary-border)">
+    <div class="patient-care-layout animate-fade-in" style="max-width: 960px; margin: 0 auto">
+      <!-- 1. Header Hero Card -->
+      <div class="card" style="margin-bottom: var(--space-6); background: linear-gradient(135deg, #F0FDF4 0%, #FFFFFF 100%); border: 1px solid var(--success-border)">
         <div class="flex justify-between items-start" style="flex-wrap: wrap; gap: var(--space-4)">
           <div>
             <div class="flex items-center gap-2" style="margin-bottom: 4px">
@@ -805,7 +653,7 @@ function renderPatientCare(el, patient) {
             </div>
             <h2 style="margin: 0; font-size: var(--font-size-xl)">${t('care.recovery_workspace') || 'Recovery & Care Continuity Workspace'}</h2>
             <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 4px">
-              Treating Physician: <strong>Dr. Aarav Sharma (General Medicine)</strong> · Discharged: <strong>Yesterday</strong>
+              Treating Physician: <strong>Dr. Aarav Sharma (General Medicine)</strong> · Discharged: <strong>Active Plan</strong>
             </div>
           </div>
 
@@ -819,7 +667,7 @@ function renderPatientCare(el, patient) {
           </div>
         </div>
 
-        <!-- Recovery Milestone Bar (Day 4 of 7) -->
+        <!-- Recovery Milestone Bar -->
         <div style="margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border-light)">
           <div class="flex justify-between items-center" style="font-size: var(--font-size-xs); margin-bottom: 6px">
             <span style="font-weight: 700; color: var(--primary)">
@@ -866,7 +714,7 @@ function renderPatientCare(el, patient) {
           <div class="kpi-icon teal"><i class="fas fa-stopwatch"></i></div>
           <div class="kpi-content">
             <div class="kpi-label">${t('care.next_dose') || 'Next Dose'}</div>
-            <div class="kpi-value" style="font-size: 18px">${nextScheduledMed ? nextScheduledMed.timing || nextScheduledMed.timeSlot : 'Completed'}</div>
+            <div class="kpi-value" style="font-size: 16px">${nextScheduledMed ? (nextScheduledMed.timing || nextScheduledMed.timeSlot) : 'Completed'}</div>
             <div class="kpi-meta">${nextScheduledMed ? escapeHtml(nextScheduledMed.name.split(' ')[0]) : 'All done today'}</div>
           </div>
         </div>
@@ -958,7 +806,31 @@ function renderPatientCare(el, patient) {
         </div>
       </div>
 
-      <!-- 5. 7-Day Adherence & Warning Signs Grid -->
+      <!-- 5. Dietary & Recovery Protocol from Doctor -->
+      ${plan.dietaryInstructions || plan.dietPlan || plan.recoveryInstructions || plan.instructions ? `
+        <div class="card" style="margin-bottom: var(--space-6); background: #F8FAFC; border: 1px solid var(--border-light)">
+          <div class="card-header flex justify-between items-center">
+            <h3 class="card-title"><i class="fas fa-utensils" style="color: var(--teal)"></i> Dietary & Recovery Instructions</h3>
+            <span class="badge badge-success"><i class="fas fa-check-circle"></i> Care Plan Sync</span>
+          </div>
+          <div class="grid-2" style="gap: var(--space-4); margin-top: var(--space-3)">
+            <div class="card-inner-box" style="background: white; margin: 0">
+              <div style="font-weight: 700; font-size: var(--font-size-xs); color: var(--teal); margin-bottom: 4px"><i class="fas fa-apple-alt"></i> Dietary Protocol:</div>
+              <p style="margin: 0; font-size: var(--font-size-xs); color: var(--text); line-height: 1.6">
+                ${escapeHtml(plan.dietaryInstructions || plan.dietPlan || 'Light meals, high fluid intake, avoid spicy foods.')}
+              </p>
+            </div>
+            <div class="card-inner-box" style="background: white; margin: 0">
+              <div style="font-weight: 700; font-size: var(--font-size-xs); color: var(--primary); margin-bottom: 4px"><i class="fas fa-bed"></i> Recovery Guidelines:</div>
+              <p style="margin: 0; font-size: var(--font-size-xs); color: var(--text); line-height: 1.6">
+                ${escapeHtml(plan.recoveryInstructions || plan.instructions || 'Adequate bed rest, avoid heavy lifting for 7 days, complete antibiotic course.')}
+              </p>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- 6. 7-Day Adherence & Warning Signs Grid -->
       <div class="grid-2" style="gap: var(--space-5); margin-bottom: var(--space-6)">
         <!-- 7-Day Adherence History -->
         <div class="card">
@@ -991,10 +863,7 @@ function renderPatientCare(el, patient) {
           </div>
 
           <ul style="margin: var(--space-3) 0 0; padding-left: 20px; font-size: var(--font-size-xs); line-height: 1.8; color: var(--text-secondary)">
-            <li><strong>Fever above 101°F</strong> persisting for over 4 hours</li>
-            <li><strong>Severe shortness of breath</strong> or chest heaviness</li>
-            <li><strong>Sudden dizziness / fainting</strong> or loss of balance</li>
-            <li><strong>Allergic reactions</strong> (skin rash, lip swelling)</li>
+            ${(plan.warningSigns && plan.warningSigns.length > 0 ? plan.warningSigns : ['Fever above 101°F persisting for over 4 hours', 'Severe shortness of breath or chest heaviness', 'Sudden dizziness / fainting or loss of balance', 'Allergic reactions (skin rash, lip swelling)']).map(w => `<li><strong>${escapeHtml(w)}</strong></li>`).join('')}
           </ul>
 
           <div style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border-light)">
@@ -1009,9 +878,12 @@ function renderPatientCare(el, patient) {
 }
 
 // ============================================
-// PATIENT HEALTH IDENTITY PROFILE REDESIGN (Phase 3)
+// PATIENT HEALTH IDENTITY PROFILE
 // ============================================
 function renderPatientProfilePage(el, patient) {
+  const user = Auth.getCurrentUser();
+  const displayEmail = user?.email || patient.email || 'patient@hospitalflow.ai';
+
   el.innerHTML = `
     <div class="patient-profile-layout animate-fade-in" style="max-width: 860px; margin: 0 auto">
       <!-- 1. Profile Header Hero Card -->
@@ -1030,7 +902,7 @@ function renderPatientProfilePage(el, patient) {
           </div>
           <div class="flex items-center gap-2">
             <span class="badge badge-success"><i class="fas fa-check-circle"></i> Profile Verified</span>
-            <span class="badge badge-info">Completion: 85%</span>
+            <span class="badge badge-info">Auth Synchronized</span>
           </div>
         </div>
       </div>
@@ -1047,11 +919,11 @@ function renderPatientProfilePage(el, patient) {
             <div class="flex justify-between border-b pb-1"><span>Age / Gender:</span> <strong>${patient.age || 29} Yrs / ${patient.gender || 'Male'}</strong></div>
             <div class="flex justify-between border-b pb-1"><span>Blood Group:</span> <strong style="color: var(--critical)">${patient.bloodGroup || 'B+'}</strong></div>
             <div class="flex justify-between border-b pb-1"><span>Phone Number:</span> <strong>${patient.phone || '+91 9876543210'}</strong></div>
-            <div class="flex justify-between"><span>Email Address:</span> <strong>amit.kumar@email.com</strong></div>
+            <div class="flex justify-between"><span>Email Address:</span> <strong style="color: var(--primary)">${escapeHtml(displayEmail)}</strong></div>
           </div>
         </div>
 
-        <!-- Emergency Contact Card (with Direct Call Button) -->
+        <!-- Emergency Contact Card -->
         <div class="card">
           <div class="card-header flex justify-between items-center">
             <h3 class="card-title"><i class="fas fa-phone-square-alt" style="color: var(--critical)"></i> Emergency Contact</h3>
@@ -1075,17 +947,23 @@ function renderPatientProfilePage(el, patient) {
           <div class="card-inner-box" style="margin: 0">
             <div style="font-weight: 700; font-size: var(--font-size-sm)"><i class="fas fa-file-medical-alt" style="color: var(--primary)"></i> Discharge Summary</div>
             <div style="font-size: 11px; color: var(--text-secondary)">Plan DP-2048 · General Medicine</div>
-            <button class="btn btn-ghost btn-sm" style="margin-top: 6px" onclick="alert('Downloading Discharge Summary PDF...')"><i class="fas fa-download"></i> View Document</button>
+            <button class="btn btn-primary btn-sm" style="margin-top: 8px; width: 100%" onclick="window._downloadDischargeSummary('${patient.id}')">
+              <i class="fas fa-download"></i> Download Summary
+            </button>
           </div>
           <div class="card-inner-box" style="margin: 0">
             <div style="font-weight: 700; font-size: var(--font-size-sm)"><i class="fas fa-pills" style="color: var(--teal)"></i> Prescription Record</div>
-            <div style="font-size: 11px; color: var(--text-secondary)">Dr. Aarav Sharma · 2 Medications</div>
-            <button class="btn btn-ghost btn-sm" style="margin-top: 6px" onclick="alert('Downloading Prescription...')"><i class="fas fa-download"></i> View Document</button>
+            <div style="font-size: 11px; color: var(--text-secondary)">Dr. Aarav Sharma · Prescribed Rx</div>
+            <button class="btn btn-secondary btn-sm" style="margin-top: 8px; width: 100%" onclick="window._downloadPrescriptionRecord('${patient.id}')">
+              <i class="fas fa-download"></i> Download Rx
+            </button>
           </div>
           <div class="card-inner-box" style="margin: 0">
             <div style="font-weight: 700; font-size: var(--font-size-sm)"><i class="fas fa-qrcode" style="color: var(--success)"></i> Patient Health QR</div>
-            <div style="font-size: 11px; color: var(--text-secondary)">Identity Token · P-1042</div>
-            <button class="btn btn-ghost btn-sm" style="margin-top: 6px" onclick="window._showAppointmentQRModal('P-1042')"><i class="fas fa-qrcode"></i> Show Token</button>
+            <div style="font-size: 11px; color: var(--text-secondary)">Identity Token · ${patient.id}</div>
+            <button class="btn btn-ghost btn-sm" style="margin-top: 8px; width: 100%" onclick="window._showAppointmentQRModal('${patient.id}')">
+              <i class="fas fa-qrcode"></i> Show Token
+            </button>
           </div>
         </div>
       </div>
@@ -1094,16 +972,20 @@ function renderPatientProfilePage(el, patient) {
 }
 
 // ============================================
-// EMERGENCY HELP WITH TWO ENTRY MODES (Phase 3)
+// EMERGENCY HELP WITH TWO ENTRY MODES (Controlled Form State)
 // ============================================
 function renderPatientEmergencyWorkflow(el, patient) {
   const s = appState.get();
   const myAmbReq = (s.ambulanceRequests || []).find(r => r.patientId === patient.id && r.status !== 'ARRIVED' && r.status !== 'CANCELLED');
   const myPreArrival = (s.preArrivalEmergencies || []).find(p => p.patientId === patient.id && p.status !== 'COMPLETED');
 
+  // Initialize phone defaults if unset
+  if (!emergencyFormState.self.phone && patient.phone) emergencyFormState.self.phone = patient.phone;
+  if (!emergencyFormState.ambulance.phone && patient.phone) emergencyFormState.ambulance.phone = patient.phone;
+
   el.innerHTML = `
     <div class="patient-emergency-layout animate-fade-in" style="max-width: 960px; margin: 0 auto">
-      <!-- Active Emergency Pre-Arrival Banner (if active) -->
+      <!-- Active Emergency Pre-Arrival Banner -->
       ${myPreArrival ? `
         <div class="card" style="border: 2px solid var(--critical-border); margin-bottom: var(--space-6); background: #FEF2F2">
           <div class="card-header flex justify-between items-center" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: var(--space-3)">
@@ -1130,7 +1012,7 @@ function renderPatientEmergencyWorkflow(el, patient) {
         </div>
       ` : ''}
 
-      <!-- Active Ambulance Request Banner (if active) -->
+      <!-- Active Ambulance Request Banner -->
       ${myAmbReq ? `
         <div class="card" style="border: 2px solid var(--critical-border); margin-bottom: var(--space-6); background: #FEF2F2">
           <div class="card-header flex justify-between items-center" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: var(--space-3)">
@@ -1175,21 +1057,21 @@ function renderPatientEmergencyWorkflow(el, patient) {
             <form id="prearrival-self-form" style="padding-top: var(--space-4)">
               <div class="form-group">
                 <label class="form-label">Primary Symptoms / Emergency Condition <span class="required">*</span></label>
-                <input type="text" id="pre-symptoms" class="form-input" placeholder="e.g. Severe chest pain radiating to left arm, breathlessness" required>
+                <input type="text" id="pre-symptoms" class="form-input" placeholder="e.g. Severe chest pain radiating to left arm, breathlessness" value="${escapeHtml(emergencyFormState.self.symptoms)}" required>
               </div>
 
               <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">Severity Level <span class="required">*</span></label>
                   <select id="pre-severity" class="form-select">
-                    <option value="Critical">Critical (Severe Distress / Trauma)</option>
-                    <option value="Urgent">Urgent Priority</option>
-                    <option value="Moderate">Moderate</option>
+                    <option value="Critical" ${emergencyFormState.self.severity === 'Critical' ? 'selected' : ''}>Critical (Severe Distress / Trauma)</option>
+                    <option value="Urgent" ${emergencyFormState.self.severity === 'Urgent' ? 'selected' : ''}>Urgent Priority</option>
+                    <option value="Moderate" ${emergencyFormState.self.severity === 'Moderate' ? 'selected' : ''}>Moderate</option>
                   </select>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Estimated Arrival Time (Minutes) <span class="required">*</span></label>
-                  <input type="number" id="pre-eta" class="form-input" value="14" min="2" max="60" required>
+                  <input type="number" id="pre-eta" class="form-input" value="${escapeHtml(emergencyFormState.self.eta || '14')}" min="2" max="60" required>
                 </div>
               </div>
 
@@ -1197,17 +1079,17 @@ function renderPatientEmergencyWorkflow(el, patient) {
                 <div class="form-group">
                   <label class="form-label">Consciousness</label>
                   <select id="pre-consciousness" class="form-select">
-                    <option value="Conscious">Fully Alert / Conscious</option>
-                    <option value="Confused">Confused / Drowsy</option>
-                    <option value="Unconscious">Unconscious / Unresponsive</option>
+                    <option value="Conscious" ${emergencyFormState.self.consciousness === 'Conscious' ? 'selected' : ''}>Fully Alert / Conscious</option>
+                    <option value="Confused" ${emergencyFormState.self.consciousness === 'Confused' ? 'selected' : ''}>Confused / Drowsy</option>
+                    <option value="Unconscious" ${emergencyFormState.self.consciousness === 'Unconscious' ? 'selected' : ''}>Unconscious / Unresponsive</option>
                   </select>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Breathing Difficulty</label>
                   <select id="pre-breathing" class="form-select">
-                    <option value="None">None / Normal</option>
-                    <option value="Mild">Mild</option>
-                    <option value="Severe">Severe Gasping / Choking</option>
+                    <option value="None" ${emergencyFormState.self.breathing === 'None' ? 'selected' : ''}>None / Normal</option>
+                    <option value="Mild" ${emergencyFormState.self.breathing === 'Mild' ? 'selected' : ''}>Mild</option>
+                    <option value="Severe" ${emergencyFormState.self.breathing === 'Severe' ? 'selected' : ''}>Severe Gasping / Choking</option>
                   </select>
                 </div>
               </div>
@@ -1216,18 +1098,18 @@ function renderPatientEmergencyWorkflow(el, patient) {
                 <div class="form-group">
                   <label class="form-label">Major Bleeding</label>
                   <select id="pre-bleeding" class="form-select">
-                    <option value="No">No active bleeding</option>
-                    <option value="Yes">Yes (External Trauma)</option>
+                    <option value="No" ${emergencyFormState.self.bleeding === 'No' ? 'selected' : ''}>No active bleeding</option>
+                    <option value="Yes" ${emergencyFormState.self.bleeding === 'Yes' ? 'selected' : ''}>Yes (External Trauma)</option>
                   </select>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Contact Phone</label>
-                  <input type="tel" id="pre-phone" class="form-input" value="${patient.phone || '+91 9876543210'}" required>
+                  <input type="tel" id="pre-phone" class="form-input" value="${escapeHtml(emergencyFormState.self.phone)}" required>
                 </div>
               </div>
 
               <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: var(--space-2)">
-                <i class="fas fa-bell"></i> Notify Hospital: I Am on the Way (~14 min)
+                <i class="fas fa-bell"></i> Notify Hospital: I Am on the Way (~${emergencyFormState.self.eta || 14} min)
               </button>
             </form>
           </div>
@@ -1249,16 +1131,16 @@ function renderPatientEmergencyWorkflow(el, patient) {
             <form id="patient-ambulance-request-form" style="padding-top: var(--space-4)">
               <div class="form-group">
                 <label class="form-label">Pickup Address / Location <span class="required">*</span></label>
-                <input type="text" id="amb-pickup-loc" class="form-input" placeholder="e.g. Flat 402, Sunshine Apts, Andheri West" required>
+                <input type="text" id="amb-pickup-loc" class="form-input" placeholder="e.g. Flat 402, Sunshine Apts, Andheri West" value="${escapeHtml(emergencyFormState.ambulance.pickupLoc)}" required>
               </div>
               <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">Contact Phone <span class="required">*</span></label>
-                  <input type="tel" id="amb-phone" class="form-input" value="${patient.phone || '+91 9876543210'}" required>
+                  <input type="tel" id="amb-phone" class="form-input" value="${escapeHtml(emergencyFormState.ambulance.phone)}" required>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Emergency Symptoms <span class="required">*</span></label>
-                  <input type="text" id="amb-symptoms" class="form-input" placeholder="e.g. Acute chest pain, shortness of breath" required>
+                  <input type="text" id="amb-symptoms" class="form-input" placeholder="e.g. Acute chest pain, shortness of breath" value="${escapeHtml(emergencyFormState.ambulance.symptoms)}" required>
                 </div>
               </div>
               <button type="submit" class="btn btn-danger btn-lg" style="width: 100%; margin-top: var(--space-2)">
@@ -1290,7 +1172,7 @@ function renderPatientEmergencyWorkflow(el, patient) {
               <div class="flex justify-between border-b pb-1"><span>Emergency Bays:</span> <strong style="color: var(--success)">2 Available</strong></div>
               <div class="flex justify-between border-b pb-1"><span>On-Duty Doctor:</span> <strong>Dr. Aarav Sharma</strong></div>
               <div class="flex justify-between border-b pb-1"><span>Trauma Team:</span> <strong>Active Standby</strong></div>
-              <div class="flex justify-between"><span>Blood Reserves:</span> <strong>FEFO Ready (All Groups)</strong></div>
+              <div class="flex justify-between"><span>Blood Reserves:</span> <strong>FEFO Ready (All 8 Groups)</strong></div>
             </div>
           </div>
 
@@ -1309,50 +1191,384 @@ function renderPatientEmergencyWorkflow(el, patient) {
     </div>
   `;
 
-  // Pre-Arrival Self Form Handler
-  el.querySelector('#prearrival-self-form')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const symptoms = el.querySelector('#pre-symptoms').value.trim();
-    const severity = el.querySelector('#pre-severity').value;
-    const eta = el.querySelector('#pre-eta').value;
-    const consciousness = el.querySelector('#pre-consciousness').value;
-    const breathing = el.querySelector('#pre-breathing').value;
-    const bleeding = el.querySelector('#pre-bleeding').value;
-    const phone = el.querySelector('#pre-phone').value.trim();
-
-    FlowEngine.createPreArrivalEmergency({
-      patientId: patient.id,
-      patientName: patient.displayName,
-      transportMode: 'Private Vehicle',
-      location: 'En route to hospital',
-      symptoms,
-      severity,
-      etaMinutes: eta,
-      phone,
-      consciousness,
-      breathingDifficulty: breathing,
-      majorBleeding: bleeding
+  // Real-time input synchronization to prevent any keystroke loss
+  const selfForm = el.querySelector('#prearrival-self-form');
+  if (selfForm) {
+    selfForm.querySelectorAll('input, select').forEach(input => {
+      const syncHandler = () => {
+        const id = input.id;
+        if (id === 'pre-symptoms') emergencyFormState.self.symptoms = input.value;
+        if (id === 'pre-severity') emergencyFormState.self.severity = input.value;
+        if (id === 'pre-eta') emergencyFormState.self.eta = input.value;
+        if (id === 'pre-consciousness') emergencyFormState.self.consciousness = input.value;
+        if (id === 'pre-breathing') emergencyFormState.self.breathing = input.value;
+        if (id === 'pre-bleeding') emergencyFormState.self.bleeding = input.value;
+        if (id === 'pre-phone') emergencyFormState.self.phone = input.value;
+      };
+      input.addEventListener('input', syncHandler);
+      input.addEventListener('change', syncHandler);
     });
 
-    alert('Pre-Arrival emergency alert sent. Hospital Emergency Command Center and Doctor have been notified.');
-    renderPatientEmergencyWorkflow(el, patient);
-  });
+    selfForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const symptoms = el.querySelector('#pre-symptoms').value.trim();
+      const severity = el.querySelector('#pre-severity').value;
+      const eta = el.querySelector('#pre-eta').value;
+      const consciousness = el.querySelector('#pre-consciousness').value;
+      const breathing = el.querySelector('#pre-breathing').value;
+      const bleeding = el.querySelector('#pre-bleeding').value;
+      const phone = el.querySelector('#pre-phone').value.trim();
 
-  // Ambulance Request Form Handler
-  el.querySelector('#patient-ambulance-request-form')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const req = FlowEngine.requestHospitalAmbulance({
-      patientId: patient.id,
-      patientName: patient.displayName,
-      pickupLocation: el.querySelector('#amb-pickup-loc').value.trim(),
-      contactNumber: el.querySelector('#amb-phone').value.trim(),
-      symptoms: el.querySelector('#amb-symptoms').value.trim(),
-      severity: 'Critical'
+      FlowEngine.createPreArrivalEmergency({
+        patientId: patient.id,
+        patientName: patient.displayName,
+        transportMode: 'Private Vehicle',
+        location: 'En route to hospital',
+        symptoms,
+        severity,
+        etaMinutes: eta,
+        phone,
+        consciousness,
+        breathingDifficulty: breathing,
+        majorBleeding: bleeding
+      });
+
+      // Clear state only on successful submission
+      emergencyFormState.self = {
+        symptoms: '',
+        severity: 'Critical',
+        eta: '14',
+        consciousness: 'Conscious',
+        breathing: 'None',
+        bleeding: 'No',
+        phone: patient.phone || ''
+      };
+
+      alert('Pre-Arrival emergency alert sent. Hospital Emergency Command Center and Doctor have been notified.');
+      renderPatientEmergencyWorkflow(el, patient);
     });
-    alert(`Ambulance request ${req.requestId} submitted. Hospital Command Center alerted.`);
-    renderPatientEmergencyWorkflow(el, patient);
-  });
+  }
+
+  const ambForm = el.querySelector('#patient-ambulance-request-form');
+  if (ambForm) {
+    ambForm.querySelectorAll('input, select').forEach(input => {
+      const syncHandler = () => {
+        const id = input.id;
+        if (id === 'amb-pickup-loc') emergencyFormState.ambulance.pickupLoc = input.value;
+        if (id === 'amb-phone') emergencyFormState.ambulance.phone = input.value;
+        if (id === 'amb-symptoms') emergencyFormState.ambulance.symptoms = input.value;
+      };
+      input.addEventListener('input', syncHandler);
+      input.addEventListener('change', syncHandler);
+    });
+
+    ambForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const req = FlowEngine.requestHospitalAmbulance({
+        patientId: patient.id,
+        patientName: patient.displayName,
+        pickupLocation: el.querySelector('#amb-pickup-loc').value.trim(),
+        contactNumber: el.querySelector('#amb-phone').value.trim(),
+        symptoms: el.querySelector('#amb-symptoms').value.trim(),
+        severity: 'Critical'
+      });
+
+      emergencyFormState.ambulance = {
+        pickupLoc: '',
+        phone: patient.phone || '',
+        symptoms: '',
+        severity: 'Critical'
+      };
+
+      alert(`Ambulance request ${req.requestId} submitted. Hospital Command Center alerted.`);
+      renderPatientEmergencyWorkflow(el, patient);
+    });
+  }
 }
+
+// Download Discharge Summary Implementation
+window._downloadDischargeSummary = (patientId) => {
+  const s = appState.get();
+  const user = Auth.getCurrentUser();
+  const patient = s.patients.find(p => p.id === patientId) || {
+    id: patientId,
+    displayName: user?.displayName || 'Amit Kumar',
+    age: 29,
+    gender: 'Male',
+    phone: '+91 9876543210',
+    bloodGroup: 'B+'
+  };
+  const plan = s.dischargePlans.find(dp => dp.patientId === patientId) || s.dischargePlans[0] || {
+    id: 'DP-2048',
+    dischargeDate: new Date().toISOString(),
+    approvedBy: 'D-0001',
+    medications: [
+      { name: 'Azithromycin 500mg', dosage: '1 tablet', timeSlot: 'Morning', duration: '5 days', instructions: 'After breakfast' },
+      { name: 'Paracetamol 650mg', dosage: '1 tablet (SOS)', timeSlot: 'Night', duration: 'As needed', instructions: 'If fever > 100°F' }
+    ],
+    dietPlan: 'Light meals, high fluid intake, avoid spicy foods.',
+    dietaryInstructions: 'Light meals, high fluid intake, avoid spicy foods.',
+    instructions: 'Adequate rest, avoid strenuous exercise for 1 week.',
+    warningSigns: ['Fever above 101°F', 'Persistent breathlessness', 'Dizziness or confusion'],
+    followUp: { department: 'General Medicine', date: 'In 7 Days', time: '10:00 AM' }
+  };
+  const doc = s.doctors.find(d => d.id === plan.approvedBy) || s.doctors[0] || { displayName: 'Aarav Sharma', specialty: 'General Medicine', id: 'D-0001' };
+
+  const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Discharge Summary - ${escapeHtml(patient.displayName)} (${patient.id})</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #0F172A; line-height: 1.5; max-width: 800px; margin: 0 auto; background: #fff; }
+    .header { border-bottom: 2px solid #0284C7; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .hospital-title { font-size: 24px; font-weight: 800; color: #0284C7; }
+    .hospital-sub { font-size: 12px; color: #64748B; }
+    .doc-type { font-size: 18px; font-weight: 700; color: #1E293B; margin-top: 8px; }
+    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+    .meta-table td { padding: 8px; border: 1px solid #E2E8F0; font-size: 13px; }
+    .meta-label { font-weight: 700; background: #F8FAFC; width: 25%; color: #475569; }
+    h3 { font-size: 15px; color: #0369A1; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px; margin-top: 20px; }
+    table.med-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    table.med-table th { background: #F1F5F9; text-align: left; padding: 8px; border: 1px solid #CBD5E1; }
+    table.med-table td { padding: 8px; border: 1px solid #E2E8F0; }
+    ul { margin: 8px 0; padding-left: 20px; font-size: 13px; color: #334155; }
+    .footer { margin-top: 40px; border-top: 1px solid #E2E8F0; padding-top: 16px; display: flex; justify-content: space-between; font-size: 12px; color: #64748B; }
+    .stamp { border: 2px dashed #0284C7; color: #0284C7; font-weight: 700; padding: 8px 16px; border-radius: 6px; display: inline-block; font-size: 12px; }
+    @media print { body { padding: 0; } .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="margin-bottom: 20px; text-align: right;">
+    <button onclick="window.print()" style="padding: 8px 16px; background: #0284C7; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">🖨️ Print / Save PDF</button>
+  </div>
+  <div class="header">
+    <div>
+      <div class="hospital-title">🏥 HospitalFlow AI Medical Center</div>
+      <div class="hospital-sub">NABH Accredited Tertiary Care Hospital · 24x7 Emergency Services</div>
+      <div class="doc-type">CLINICAL DISCHARGE SUMMARY</div>
+    </div>
+    <div style="text-align: right; font-size: 12px; color: #64748B;">
+      Plan ID: <strong>${plan.id || 'DP-2048'}</strong><br>
+      Date: <strong>${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
+    </div>
+  </div>
+
+  <table class="meta-table">
+    <tr>
+      <td class="meta-label">Patient Name</td>
+      <td><strong>${escapeHtml(patient.displayName)}</strong></td>
+      <td class="meta-label">Patient ID</td>
+      <td><strong>${patient.id}</strong></td>
+    </tr>
+    <tr>
+      <td class="meta-label">Age / Gender</td>
+      <td>${patient.age || 29} Yrs / ${patient.gender || 'Male'}</td>
+      <td class="meta-label">Blood Group</td>
+      <td><strong style="color: #DC2626">${patient.bloodGroup || 'B+'}</strong></td>
+    </tr>
+    <tr>
+      <td class="meta-label">Attending Physician</td>
+      <td><strong>Dr. ${escapeHtml(doc.displayName)}</strong> (${escapeHtml(doc.specialty || 'General Medicine')})</td>
+      <td class="meta-label">Contact Phone</td>
+      <td>${patient.phone || '+91 9876543210'}</td>
+    </tr>
+  </table>
+
+  <h3>1. Discharge Medications & Prescription</h3>
+  <table class="med-table">
+    <thead>
+      <tr>
+        <th>Medication</th>
+        <th>Dosage</th>
+        <th>Timing / Slot</th>
+        <th>Duration</th>
+        <th>Food Relation</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(plan.medications || []).map(m => `
+        <tr>
+          <td><strong>${escapeHtml(m.name)}</strong></td>
+          <td>${escapeHtml(m.dosage || '1 dose')}</td>
+          <td>${escapeHtml(m.timeSlot || m.timing || 'Daily')}</td>
+          <td>${escapeHtml(m.duration || '5 days')}</td>
+          <td>${escapeHtml(m.instructions || 'After food')}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <h3>2. Dietary & Nutrition Instructions</h3>
+  <p style="font-size: 13px; color: #334155; margin: 6px 0;">
+    ${escapeHtml(plan.dietaryInstructions || plan.dietPlan || 'Light meals, high fluid intake (2-3L water/day), avoid spicy or greasy foods.')}
+  </p>
+
+  <h3>3. Recovery & Activity Guidelines</h3>
+  <p style="font-size: 13px; color: #334155; margin: 6px 0;">
+    ${escapeHtml(plan.recoveryInstructions || plan.instructions || 'Strict bed rest for 48 hours. Avoid heavy physical lifting. Resume routine activities gradually.')}
+  </p>
+
+  <h3>4. Warning Signs Requiring Immediate Hospital Re-Entry</h3>
+  <ul>
+    ${(plan.warningSigns && plan.warningSigns.length > 0 ? plan.warningSigns : ['Fever exceeding 101°F for over 4 hours', 'Acute shortness of breath or chest heaviness', 'Sudden dizziness, severe nausea, or allergic rash']).map(w => `<li><strong>${escapeHtml(w)}</strong></li>`).join('')}
+  </ul>
+
+  <h3>5. Scheduled Clinical Follow-Up</h3>
+  <p style="font-size: 13px; color: #334155; margin: 6px 0;">
+    Scheduled with <strong>${escapeHtml(plan.followUp?.department || 'General Medicine')}</strong> on <strong>${plan.followUp?.date ? (plan.followUp.date) : 'In 7 Days'}</strong> at <strong>${plan.followUp?.time || '10:00 AM'}</strong>.
+  </p>
+
+  <div class="footer">
+    <div>
+      <div class="stamp">✓ CLINICALLY AUTHORIZED</div>
+      <div style="font-size: 11px; margin-top: 4px;">HospitalFlow AI Digital Health Records</div>
+    </div>
+    <div style="text-align: right;">
+      <div style="font-weight: 700;">Dr. ${escapeHtml(doc.displayName)}</div>
+      <div style="font-size: 11px;">MCI Reg #${doc.registrationNo || 'MCI-58492-A'}</div>
+      <div style="font-size: 11px; color: #94A3B8;">Digital Signature Verified</div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `Discharge_Summary_${patient.id}.html`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  const printWindow = window.open(url, '_blank');
+  if (printWindow) printWindow.focus();
+};
+
+// Download Prescription Record Implementation
+window._downloadPrescriptionRecord = (patientId) => {
+  const s = appState.get();
+  const user = Auth.getCurrentUser();
+  const patient = s.patients.find(p => p.id === patientId) || {
+    id: patientId,
+    displayName: user?.displayName || 'Amit Kumar',
+    age: 29,
+    gender: 'Male',
+    phone: '+91 9876543210',
+    bloodGroup: 'B+'
+  };
+  const plan = s.dischargePlans.find(dp => dp.patientId === patientId) || s.dischargePlans[0] || {
+    id: 'DP-2048',
+    approvedBy: 'D-0001',
+    medications: [
+      { name: 'Azithromycin 500mg', dosage: '1 tablet', timeSlot: 'Morning', duration: '5 days', instructions: 'After breakfast' },
+      { name: 'Paracetamol 650mg', dosage: '1 tablet (SOS)', timeSlot: 'Night', duration: 'As needed', instructions: 'If fever > 100°F' }
+    ]
+  };
+  const doc = s.doctors.find(d => d.id === plan.approvedBy) || s.doctors[0] || { displayName: 'Aarav Sharma', specialty: 'General Medicine', id: 'D-0001' };
+
+  const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Prescription Record - ${escapeHtml(patient.displayName)} (${patient.id})</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #0F172A; line-height: 1.5; max-width: 800px; margin: 0 auto; background: #fff; }
+    .header { border-bottom: 2px solid #0D9488; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; }
+    .rx-symbol { font-size: 32px; font-weight: 800; color: #0D9488; font-family: serif; }
+    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+    .meta-table td { padding: 8px; border: 1px solid #E2E8F0; font-size: 13px; }
+    .meta-label { font-weight: 700; background: #F8FAFC; width: 25%; color: #475569; }
+    table.med-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    table.med-table th { background: #F0FDFA; color: #0F766E; text-align: left; padding: 8px; border: 1px solid #CCFBF1; }
+    table.med-table td { padding: 8px; border: 1px solid #E2E8F0; }
+    .footer { margin-top: 40px; border-top: 1px solid #E2E8F0; padding-top: 16px; display: flex; justify-content: space-between; font-size: 12px; color: #64748B; }
+    @media print { body { padding: 0; } .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="margin-bottom: 20px; text-align: right;">
+    <button onclick="window.print()" style="padding: 8px 16px; background: #0D9488; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">🖨️ Print Prescription</button>
+  </div>
+  <div class="header">
+    <div>
+      <div style="font-size: 20px; font-weight: 800; color: #0F766E;">Dr. ${escapeHtml(doc.displayName)}</div>
+      <div style="font-size: 12px; color: #64748B;">MBBS, MD (${escapeHtml(doc.specialty || 'General Medicine')}) · Reg #${doc.registrationNo || 'MCI-58492-A'}</div>
+      <div style="font-size: 12px; color: #64748B;">HospitalFlow AI Clinical Health System</div>
+    </div>
+    <div style="text-align: right; font-size: 12px; color: #64748B;">
+      <div>Date: <strong>${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</strong></div>
+      <div class="rx-symbol">℞</div>
+    </div>
+  </div>
+
+  <table class="meta-table">
+    <tr>
+      <td class="meta-label">Patient Name</td>
+      <td><strong>${escapeHtml(patient.displayName)}</strong></td>
+      <td class="meta-label">Patient ID</td>
+      <td><strong>${patient.id}</strong></td>
+    </tr>
+    <tr>
+      <td class="meta-label">Age / Gender</td>
+      <td>${patient.age || 29} Yrs / ${patient.gender || 'Male'}</td>
+      <td class="meta-label">Blood Group</td>
+      <td><strong style="color: #DC2626">${patient.bloodGroup || 'B+'}</strong></td>
+    </tr>
+  </table>
+
+  <h3 style="color: #0F766E; font-size: 15px; margin-top: 16px;">Prescribed Medications (Rx)</h3>
+  <table class="med-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Medicine Name & Strength</th>
+        <th>Dose</th>
+        <th>Frequency / Timing</th>
+        <th>Duration</th>
+        <th>Instructions</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(plan.medications || []).map((m, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td><strong>${escapeHtml(m.name)}</strong></td>
+          <td>${escapeHtml(m.dosage || '1 tablet')}</td>
+          <td>${escapeHtml(m.timeSlot || m.timing || 'Daily')}</td>
+          <td>${escapeHtml(m.duration || '5 days')}</td>
+          <td>${escapeHtml(m.instructions || 'After food')}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <div style="margin-top: 24px; padding: 12px; background: #F8FAFC; border-radius: 6px; font-size: 12px; color: #475569;">
+    <strong>Special Clinical Notes:</strong><br>
+    Please adhere strictly to the timing instructions. In case of allergic reactions, discontinue and report to hospital emergency immediately.
+  </div>
+
+  <div class="footer">
+    <div>HospitalFlow AI Verified E-Prescription</div>
+    <div style="text-align: right;">
+      <div style="font-weight: 700;">Dr. ${escapeHtml(doc.displayName)}</div>
+      <div style="font-size: 11px; color: #94A3B8;">Digitally Signed & Validated</div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `Prescription_${patient.id}.html`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  const printWindow = window.open(url, '_blank');
+  if (printWindow) printWindow.focus();
+};
 
 // Skip Medication Modal
 window._showSkipMedicationModal = (patientId, medName, timeSlot) => {

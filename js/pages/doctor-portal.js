@@ -668,26 +668,140 @@ function renderDoctorCarePlans(el, doctor) {
 }
 
 // ============================================
-// 7. DOCTOR PROFILE
+// 7. DOCTOR PROFILE WORKSPACE (Requirements 35, 36, 37)
 // ============================================
 function renderDoctorProfile(el, doctor) {
+  const s = appState.get();
+  const waitingPatients = s.queueEntries.filter(q => q.doctorId === doctor.id && q.status === 'Waiting').length;
+  const myEmergencies = (s.emergencyCases || []).filter(c => c.doctorId === doctor.id && c.status !== 'COMPLETED').length;
+  const myFollowUps = s.followUps.filter(f => f.doctorId === doctor.id).length;
+
   el.innerHTML = `
-    <div class="doctor-profile-layout animate-fade-in" style="max-width: 840px; margin: 0 auto">
-      <div class="card" style="margin-bottom: var(--space-6); background: linear-gradient(135deg, #F0FDF4 0%, #FFFFFF 100%); border: 1px solid #BBF7D0">
-        <div class="flex items-center gap-4">
-          <div class="header-user-avatar" style="width: 64px; height: 64px; font-size: 24px; background: #DCFCE7; color: #16A34A">
-            ${getInitials(doctor.displayName)}
-          </div>
-          <div>
-            <h2 style="margin: 0">Dr. ${escapeHtml(doctor.displayName)}</h2>
-            <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 2px">
-              ${escapeHtml(doctor.department)} · Specialist in ${escapeHtml(doctor.specialty || 'Internal Medicine')} · Room <strong>${doctor.room || 'G-04'}</strong>
+    <div class="doctor-profile-layout animate-fade-in" style="max-width: 880px; margin: 0 auto">
+      <!-- 1. Doctor Header Hero Card -->
+      <div class="card" style="margin-bottom: var(--space-5); background: linear-gradient(135deg, #F0FDF4 0%, #FFFFFF 100%); border: 1px solid #BBF7D0">
+        <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: var(--space-4)">
+          <div class="flex items-center gap-4">
+            <div class="header-user-avatar" style="width: 72px; height: 72px; font-size: 26px; background: #DCFCE7; color: #16A34A">
+              ${getInitials(doctor.displayName)}
+            </div>
+            <div>
+              <h2 style="margin: 0; font-size: var(--font-size-xl)">Dr. ${escapeHtml(doctor.displayName)}</h2>
+              <div style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 2px">
+                ID: <strong>${doctor.id}</strong> · ${escapeHtml(doctor.department)} · Specialist in <strong>${escapeHtml(doctor.specialty || 'Internal Medicine')}</strong>
+              </div>
+              <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px">
+                Reg No: <strong>${doctor.registrationNumber || 'MCI-84920-A'}</strong> · Room: <strong>${doctor.room || 'G-04'}</strong>
+              </div>
             </div>
           </div>
+          <div class="flex items-center gap-2">
+            <span class="badge badge-success"><i class="fas fa-check-circle"></i> Verified Clinician</span>
+            <span class="badge ${doctor.status === 'Available' ? 'badge-success' : 'badge-warning'}">${doctor.status || 'Available'}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Clinical Workload KPIs -->
+      <div class="grid-4" style="margin-bottom: var(--space-5)">
+        <div class="metric-card">
+          <div class="kpi-icon green"><i class="fas fa-user-check"></i></div>
+          <div class="kpi-content">
+            <div class="kpi-label">Completed Today</div>
+            <div class="kpi-value">${doctor.completedToday || 4}</div>
+            <div class="kpi-meta">Patients seen</div>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="kpi-icon blue"><i class="fas fa-users"></i></div>
+          <div class="kpi-content">
+            <div class="kpi-label">Waiting Queue</div>
+            <div class="kpi-value">${waitingPatients}</div>
+            <div class="kpi-meta">Active tokens</div>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="kpi-icon red"><i class="fas fa-heartbeat"></i></div>
+          <div class="kpi-content">
+            <div class="kpi-label">Emergency Load</div>
+            <div class="kpi-value">${myEmergencies}</div>
+            <div class="kpi-meta">Assigned triage</div>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="kpi-icon teal"><i class="fas fa-calendar-check"></i></div>
+          <div class="kpi-content">
+            <div class="kpi-label">Follow-Ups</div>
+            <div class="kpi-value">${myFollowUps}</div>
+            <div class="kpi-meta">Continuity care</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Two-Column Credentials & Edit Form -->
+      <div class="grid-2" style="gap: var(--space-5); margin-bottom: var(--space-6)">
+        <!-- Clinical Credentials -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-certificate"></i> Clinical Qualifications</h3>
+          </div>
+          <div class="flex flex-col gap-3" style="font-size: var(--font-size-xs)">
+            <div class="flex justify-between border-b pb-1"><span>Qualification:</span> <strong>${doctor.qualifications || 'MBBS, MD (Medicine), DNB'}</strong></div>
+            <div class="flex justify-between border-b pb-1"><span>Clinical Experience:</span> <strong>${doctor.experience || '12+ Years'}</strong></div>
+            <div class="flex justify-between border-b pb-1"><span>Consultation Shift:</span> <strong>09:00 AM – 05:00 PM</strong></div>
+            <div class="flex justify-between border-b pb-1"><span>Avg Consultation:</span> <strong>${doctor.averageConsultationMinutes || 9} minutes</strong></div>
+            <div class="flex justify-between"><span>OPD Location:</span> <strong>OPD Block B, Room ${doctor.room || 'G-04'}</strong></div>
+          </div>
+        </div>
+
+        <!-- Editable Profile Information -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-user-edit"></i> Edit Profile & Contact</h3>
+          </div>
+          <form id="doc-profile-edit-form" class="flex flex-col gap-3" style="font-size: var(--font-size-xs)">
+            <div class="form-group">
+              <label class="form-label">Professional Email</label>
+              <input type="email" id="edit-doc-email" class="form-input" value="${doctor.email || `${doctor.displayName.toLowerCase().replace(/[^a-z]/g, '')}@hospitalflow.ai`}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Contact Phone</label>
+              <input type="tel" id="edit-doc-phone" class="form-input" value="${doctor.phone || '+91 9876543201'}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Spoken Languages</label>
+              <input type="text" id="edit-doc-languages" class="form-input" value="${doctor.languages || 'English, Hindi, Marathi'}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Professional Bio / Summary</label>
+              <textarea id="edit-doc-bio" class="form-textarea" rows="2">${doctor.bio || 'Senior Consultant Physician specializing in general medicine, trauma triage, and post-discharge continuity care.'}</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm" style="margin-top: 4px">
+              <i class="fas fa-save"></i> Save Profile Updates
+            </button>
+          </form>
         </div>
       </div>
     </div>
   `;
+
+  el.querySelector('#doc-profile-edit-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const updatedEmail = el.querySelector('#edit-doc-email').value.trim();
+    const updatedPhone = el.querySelector('#edit-doc-phone').value.trim();
+    const updatedLanguages = el.querySelector('#edit-doc-languages').value.trim();
+    const updatedBio = el.querySelector('#edit-doc-bio').value.trim();
+
+    appState.updateItem('doctors', doctor.id, {
+      email: updatedEmail,
+      phone: updatedPhone,
+      languages: updatedLanguages,
+      bio: updatedBio
+    });
+
+    alert('Doctor profile updated successfully.');
+    renderDoctorProfile(el, appState.get().doctors.find(d => d.id === doctor.id) || doctor);
+  });
 }
 
 // ============================================

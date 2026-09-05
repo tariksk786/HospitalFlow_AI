@@ -18,8 +18,10 @@ import { renderDemoSimulation } from './demo-simulation.js';
 
 let patientFilter = 'All';
 let patientSort = 'Priority';
+let patientSearch = '';
 let doctorFilter = 'All';
 let doctorSort = 'Load';
+let doctorSearch = '';
 let auditFilterType = '';
 let auditSearch = '';
 
@@ -42,6 +44,16 @@ export function renderAdminPortal(container, subRoute = 'command') {
   ];
 
   const unackAlerts = alertManager.getUnacknowledgedCount('admin');
+
+  // Trigger emergency alert check on admin initialization if active P1/P2 cases exist
+  const activeEmergencies = (appState.get().emergencyCases || []).filter(c => c.status !== 'COMPLETED');
+  if (activeEmergencies.length > 0) {
+    try {
+      alertManager.checkAndAlert('admin');
+    } catch (e) {
+      console.warn('AlertManager init warning:', e);
+    }
+  }
 
   container.innerHTML = `
     <div class="app-shell animate-fade-in" id="admin-app-shell">
@@ -166,6 +178,10 @@ export function renderAdminPortal(container, subRoute = 'command') {
   // Reactive subscription for zero-refresh operational synchronization
   const unsubscribeState = appState.subscribe(() => {
     if (['patients', 'doctors'].includes(subRoute)) {
+      const active = document.activeElement;
+      if (active && (active.id === 'patient-search-input' || active.id === 'doctor-search-input')) {
+        return; // Don't interrupt search input typing
+      }
       renderCurrentSubRoute();
     }
   });
@@ -181,7 +197,7 @@ export function renderAdminPortal(container, subRoute = 'command') {
 }
 
 // ============================================
-// 1. ADMIN PATIENTS PAGE (LIVE JOURNEY CARDS)
+// 1. ADMIN PATIENTS PAGE (LIVE JOURNEY CARDS + SEARCH)
 // ============================================
 function renderAdminPatientsPage(el) {
   const s = appState.get();
@@ -189,7 +205,18 @@ function renderAdminPatientsPage(el) {
 
   let patientsList = [...s.patients];
 
-  // Filtering
+  // Search Filter
+  if (patientSearch.trim()) {
+    const q = patientSearch.toLowerCase().trim();
+    patientsList = patientsList.filter(p =>
+      p.displayName?.toLowerCase().includes(q) ||
+      p.id?.toLowerCase().includes(q) ||
+      p.phone?.includes(q) ||
+      p.bloodGroup?.toLowerCase().includes(q)
+    );
+  }
+
+  // Status Filtering
   if (patientFilter !== 'All') {
     patientsList = patientsList.filter(p => {
       const journey = appState.getPatientJourneyState(p.id);
@@ -212,7 +239,7 @@ function renderAdminPatientsPage(el) {
 
   el.innerHTML = `
     <div class="admin-patients-layout animate-fade-in">
-      <!-- Dedicated Emergency / Priority Patients Section (Requirement 12 & 13) -->
+      <!-- Dedicated Emergency / Priority Patients Section -->
       ${emergencyCases.length > 0 ? `
         <div class="card" style="border-left: 4px solid var(--critical); margin-bottom: var(--space-6); background: #FFF5F5">
           <div class="card-header flex justify-between items-center" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: var(--space-3)">
@@ -248,87 +275,137 @@ function renderAdminPatientsPage(el) {
         </div>
       ` : ''}
 
-      <!-- Filter and Action Bar -->
+      <!-- Search & Filter Bar -->
       <div class="card" style="margin-bottom: var(--space-4); padding: var(--space-4)">
-        <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: var(--space-3)">
-          <div class="flex items-center gap-2" style="flex-wrap: wrap">
-            <span style="font-size: var(--font-size-xs); font-weight: 700; color: var(--text-secondary)">Filter Status:</span>
-            ${['All', 'Scheduled', 'Waiting', 'Consulting', 'Emergency', 'Discharged', 'Care at Home', 'Needs Review'].map(f => `
-              <button class="btn btn-sm ${patientFilter === f ? 'btn-primary' : 'btn-ghost'}" onclick="window._setPatientFilter('${f}')">
-                ${f}
+        <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3)">
+          <!-- Search Box -->
+          <div class="flex items-center gap-2" style="flex: 1; min-width: 280px; position: relative">
+            <div style="position: absolute; left: 12px; color: var(--text-secondary); pointer-events: none">
+              <i class="fas fa-search"></i>
+            </div>
+            <input type="text" id="patient-search-input" class="form-input" style="padding-left: 36px; padding-right: 32px; height: 38px"
+              placeholder="Search patients by name or Patient ID (e.g. Amit, P-1042)..." value="${escapeHtml(patientSearch)}">
+            ${patientSearch ? `
+              <button id="btn-clear-patient-search" class="btn btn-ghost btn-icon" style="position: absolute; right: 4px; height: 30px; width: 30px; color: var(--text-secondary)" title="Clear search">
+                <i class="fas fa-times"></i>
               </button>
-            `).join('')}
+            ` : ''}
           </div>
 
-          <div class="flex items-center gap-2">
-            <span style="font-size: var(--font-size-xs); color: var(--text-secondary)">Sort:</span>
-            <select id="patient-sort-select" class="form-select" style="height: 32px; font-size: 12px">
-              <option value="Priority" ${patientSort === 'Priority' ? 'selected' : ''}>Highest Priority First</option>
-              <option value="Name" ${patientSort === 'Name' ? 'selected' : ''}>Patient Name</option>
-            </select>
+          <div class="flex items-center gap-3">
+            <span class="badge badge-info">${patientsList.length} of ${s.patients.length} Patients</span>
+            <div class="flex items-center gap-2">
+              <span style="font-size: var(--font-size-xs); color: var(--text-secondary)">Sort:</span>
+              <select id="patient-sort-select" class="form-select" style="height: 36px; font-size: 12px">
+                <option value="Priority" ${patientSort === 'Priority' ? 'selected' : ''}>Highest Priority First</option>
+                <option value="Name" ${patientSort === 'Name' ? 'selected' : ''}>Patient Name</option>
+              </select>
+            </div>
           </div>
+        </div>
+
+        <!-- Filter Chips -->
+        <div class="flex items-center gap-2" style="flex-wrap: wrap; padding-top: var(--space-2); border-top: 1px solid var(--border-light)">
+          <span style="font-size: var(--font-size-xs); font-weight: 700; color: var(--text-secondary)">Filter Status:</span>
+          ${['All', 'Scheduled', 'Waiting', 'Consulting', 'Emergency', 'Discharged', 'Care at Home', 'Needs Review'].map(f => `
+            <button class="btn btn-sm ${patientFilter === f ? 'btn-primary' : 'btn-ghost'}" onclick="window._setPatientFilter('${f}')">
+              ${f}
+            </button>
+          `).join('')}
         </div>
       </div>
 
-      <!-- Live Patient Cards Grid (Requirement 3, 4, 27) -->
-      <div class="grid-2" style="gap: var(--space-4)">
-        ${patientsList.map(p => {
-          const journey = appState.getPatientJourneyState(p.id);
-          const apt = s.appointments.find(a => a.patientId === p.id && a.status === 'Scheduled');
-          const queue = s.queueEntries.find(q => q.patientId === p.id && ['Waiting', 'Called', 'Consulting'].includes(q.status));
-          const doc = apt ? s.doctors.find(d => d.id === apt.doctorId) : (queue ? s.doctors.find(d => d.id === queue.doctorId) : null);
+      <!-- Live Patient Cards Grid -->
+      ${patientsList.length > 0 ? `
+        <div class="grid-2" style="gap: var(--space-4)">
+          ${patientsList.map(p => {
+            const journey = appState.getPatientJourneyState(p.id);
+            const apt = s.appointments.find(a => a.patientId === p.id && a.status === 'Scheduled');
+            const queue = s.queueEntries.find(q => q.patientId === p.id && ['Waiting', 'Called', 'Consulting'].includes(q.status));
+            const doc = apt ? s.doctors.find(d => d.id === apt.doctorId) : (queue ? s.doctors.find(d => d.id === queue.doctorId) : null);
 
-          return `
-            <div class="card live-patient-card animate-fade-in" style="border-left: 4px solid var(--${journey.variant === 'danger' ? 'critical' : journey.variant === 'warning' ? 'warning' : journey.variant === 'success' ? 'success' : 'primary'})">
-              <div class="flex justify-between items-start" style="margin-bottom: var(--space-3)">
-                <div class="flex items-center gap-3">
-                  <div class="header-user-avatar" style="width: 44px; height: 44px; font-size: 16px">${getInitials(p.displayName)}</div>
-                  <div>
-                    <h4 style="margin: 0; font-size: var(--font-size-md)">${escapeHtml(p.displayName)}</h4>
-                    <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">
-                      ID: <strong>${p.id}</strong> · ${p.age || 29} Yrs · ${p.gender || 'Male'} · Blood: <strong>${p.bloodGroup || 'O+'}</strong>
+            return `
+              <div class="card live-patient-card animate-fade-in" style="border-left: 4px solid var(--${journey.variant === 'danger' ? 'critical' : journey.variant === 'warning' ? 'warning' : journey.variant === 'success' ? 'success' : 'primary'})">
+                <div class="flex justify-between items-start" style="margin-bottom: var(--space-3)">
+                  <div class="flex items-center gap-3">
+                    <div class="header-user-avatar" style="width: 44px; height: 44px; font-size: 16px">${getInitials(p.displayName)}</div>
+                    <div>
+                      <h4 style="margin: 0; font-size: var(--font-size-md)">${escapeHtml(p.displayName)}</h4>
+                      <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">
+                        ID: <strong>${p.id}</strong> · ${p.age || 29} Yrs · ${p.gender || 'Male'} · Blood: <strong>${p.bloodGroup || 'O+'}</strong>
+                      </div>
                     </div>
                   </div>
+                  <span class="badge badge-${journey.variant}">
+                    <i class="fas ${journey.icon}"></i> ${journey.status}
+                  </span>
                 </div>
-                <span class="badge badge-${journey.variant}">
-                  <i class="fas ${journey.icon}"></i> ${journey.status}
-                </span>
-              </div>
 
-              <!-- Live Operational Journey Details -->
-              <div class="card-inner-box" style="background: var(--bg-subtle); margin: var(--space-3) 0; font-size: var(--font-size-xs)">
-                <div class="flex justify-between" style="margin-bottom: 4px">
-                  <span>Department: <strong>${escapeHtml(apt?.department || queue?.department || 'General Medicine')}</strong></span>
-                  <span>Doctor: <strong>Dr. ${escapeHtml(doc?.displayName || 'Aarav Sharma')}</strong></span>
+                <!-- Live Operational Journey Details -->
+                <div class="card-inner-box" style="background: var(--bg-subtle); margin: var(--space-3) 0; font-size: var(--font-size-xs)">
+                  <div class="flex justify-between" style="margin-bottom: 4px">
+                    <span>Department: <strong>${escapeHtml(apt?.department || queue?.department || 'General Medicine')}</strong></span>
+                    <span>Doctor: <strong>Dr. ${escapeHtml(doc?.displayName || 'Aarav Sharma')}</strong></span>
+                  </div>
+                  <div class="flex justify-between" style="margin-bottom: 4px">
+                    <span>Token: <strong style="color: var(--primary)">${queue?.id || 'Not Checked In'}</strong></span>
+                    <span>ETA: <strong style="color: var(--primary)">${queue?.estimatedWait != null ? formatMinutes(queue.estimatedWait) : '~18m'}</strong></span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span>Symptoms: <em>"${escapeHtml(apt?.symptom_original_text || 'Fever, Cough')}"</em></span>
+                    <span>Ahead: <strong>${queue ? Math.max(0, queue.position - 1) : '0'}</strong></span>
+                  </div>
                 </div>
-                <div class="flex justify-between" style="margin-bottom: 4px">
-                  <span>Token: <strong style="color: var(--primary)">${queue?.id || 'Not Checked In'}</strong></span>
-                  <span>ETA: <strong style="color: var(--primary)">${queue?.estimatedWait != null ? formatMinutes(queue.estimatedWait) : '~18m'}</strong></span>
-                </div>
-                <div class="flex justify-between">
-                  <span>Symptoms: <em>"${escapeHtml(apt?.symptom_original_text || 'Fever, Cough')}"</em></span>
-                  <span>Ahead: <strong>${queue ? Math.max(0, queue.position - 1) : '0'}</strong></span>
-                </div>
-              </div>
 
-              <!-- Live Action Bar -->
-              <div class="flex gap-2" style="margin-top: var(--space-3)">
-                <button class="btn btn-primary btn-sm" onclick="window._showPatientJourneyDrawer('${p.id}')">
-                  <i class="fas fa-stream"></i> View Journey
-                </button>
-                <a href="tel:${p.phone || '+919876543210'}" class="btn btn-secondary btn-sm" title="Direct Phone Call">
-                  <i class="fas fa-phone-alt"></i> Call
-                </a>
-                <button class="btn btn-ghost btn-sm" onclick="window._showPatientCareModal('${p.id}')">
-                  <i class="fas fa-file-medical"></i> Care Plan
-                </button>
+                <!-- Live Action Bar -->
+                <div class="flex gap-2" style="margin-top: var(--space-3)">
+                  <button class="btn btn-primary btn-sm" onclick="window._showPatientJourneyDrawer('${p.id}')">
+                    <i class="fas fa-stream"></i> View Journey
+                  </button>
+                  <a href="tel:${p.phone || '+919876543210'}" class="btn btn-secondary btn-sm" title="Direct Phone Call">
+                    <i class="fas fa-phone-alt"></i> Call
+                  </a>
+                  <button class="btn btn-ghost btn-sm" onclick="window._showPatientCareModal('${p.id}')">
+                    <i class="fas fa-file-medical"></i> Care Plan
+                  </button>
+                </div>
               </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
+            `;
+          }).join('')}
+        </div>
+      ` : `
+        <div class="card empty-state" style="padding: var(--space-8); text-align: center">
+          <i class="fas fa-user-slash" style="font-size: 40px; color: var(--text-secondary); margin-bottom: 12px"></i>
+          <h4>No patients found matching "${escapeHtml(patientSearch)}"</h4>
+          <p style="color: var(--text-secondary); font-size: var(--font-size-xs)">Try searching by patient name (e.g. Amit, Neha) or ID (e.g. P-1001, 1042).</p>
+          <button class="btn btn-secondary btn-sm" onclick="window._clearPatientSearch()" style="margin-top: 12px">
+            <i class="fas fa-times"></i> Clear Search
+          </button>
+        </div>
+      `}
     </div>
   `;
+
+  const searchInput = el.querySelector('#patient-search-input');
+  searchInput?.addEventListener('input', (e) => {
+    patientSearch = e.target.value;
+    renderAdminPatientsPage(el);
+    const updatedInput = el.querySelector('#patient-search-input');
+    if (updatedInput) {
+      updatedInput.focus();
+      updatedInput.setSelectionRange(patientSearch.length, patientSearch.length);
+    }
+  });
+
+  el.querySelector('#btn-clear-patient-search')?.addEventListener('click', () => {
+    patientSearch = '';
+    renderAdminPatientsPage(el);
+  });
+
+  window._clearPatientSearch = () => {
+    patientSearch = '';
+    renderAdminPatientsPage(el);
+  };
 
   window._setPatientFilter = (filter) => {
     patientFilter = filter;
@@ -342,12 +419,24 @@ function renderAdminPatientsPage(el) {
 }
 
 // ============================================
-// 2. ADMIN DOCTORS PAGE (OPERATIONAL WORKLOAD CARDS)
+// 2. ADMIN DOCTORS PAGE (OPERATIONAL WORKLOAD CARDS + SEARCH)
 // ============================================
 function renderAdminDoctorsPage(el) {
   const s = appState.get();
 
   let docsList = [...s.doctors];
+
+  // Search Filter
+  if (doctorSearch.trim()) {
+    const q = doctorSearch.toLowerCase().trim();
+    docsList = docsList.filter(d =>
+      d.displayName?.toLowerCase().includes(q) ||
+      d.id?.toLowerCase().includes(q) ||
+      d.department?.toLowerCase().includes(q) ||
+      d.specialty?.toLowerCase().includes(q) ||
+      d.room?.toLowerCase().includes(q)
+    );
+  }
 
   if (doctorFilter !== 'All') {
     docsList = docsList.filter(d => d.status === doctorFilter || (doctorFilter === 'Emergency Active' && (d.status === 'EMERGENCY_ACTIVE' || d.status === 'EMERGENCY_ASSIGNED')));
@@ -355,108 +444,162 @@ function renderAdminDoctorsPage(el) {
 
   el.innerHTML = `
     <div class="admin-doctors-layout animate-fade-in">
-      <!-- Filter Bar -->
+      <!-- Search & Filter Bar -->
       <div class="card" style="margin-bottom: var(--space-4); padding: var(--space-4)">
-        <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: var(--space-3)">
-          <div class="flex items-center gap-2" style="flex-wrap: wrap">
-            <span style="font-size: var(--font-size-xs); font-weight: 700; color: var(--text-secondary)">Filter Status:</span>
-            ${['All', 'Available', 'Consulting', 'Emergency Active', 'Break'].map(f => `
-              <button class="btn btn-sm ${doctorFilter === f ? 'btn-primary' : 'btn-ghost'}" onclick="window._setDoctorFilter('${f}')">
-                ${f}
+        <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3)">
+          <!-- Search Box -->
+          <div class="flex items-center gap-2" style="flex: 1; min-width: 280px; position: relative">
+            <div style="position: absolute; left: 12px; color: var(--text-secondary); pointer-events: none">
+              <i class="fas fa-search"></i>
+            </div>
+            <input type="text" id="doctor-search-input" class="form-input" style="padding-left: 36px; padding-right: 32px; height: 38px"
+              placeholder="Search doctors by name, Doctor ID, department or specialization..." value="${escapeHtml(doctorSearch)}">
+            ${doctorSearch ? `
+              <button id="btn-clear-doctor-search" class="btn btn-ghost btn-icon" style="position: absolute; right: 4px; height: 30px; width: 30px; color: var(--text-secondary)" title="Clear search">
+                <i class="fas fa-times"></i>
               </button>
-            `).join('')}
+            ` : ''}
           </div>
+
+          <div class="flex items-center gap-3">
+            <span class="badge badge-info">${docsList.length} of ${s.doctors.length} Doctors</span>
+          </div>
+        </div>
+
+        <!-- Filter Chips -->
+        <div class="flex items-center gap-2" style="flex-wrap: wrap; padding-top: var(--space-2); border-top: 1px solid var(--border-light)">
+          <span style="font-size: var(--font-size-xs); font-weight: 700; color: var(--text-secondary)">Filter Status:</span>
+          ${['All', 'Available', 'Consulting', 'Emergency Active', 'Break'].map(f => `
+            <button class="btn btn-sm ${doctorFilter === f ? 'btn-primary' : 'btn-ghost'}" onclick="window._setDoctorFilter('${f}')">
+              ${f}
+            </button>
+          `).join('')}
         </div>
       </div>
 
-      <!-- Live Doctor Operational Cards Grid (Requirement 5, 6, 14, 28) -->
-      <div class="grid-2" style="gap: var(--space-4)">
-        ${docsList.map(doc => {
-          const op = appState.getDoctorOperationalState(doc.id);
-          const currentPatient = op?.currentPatient;
-          const assignedEm = (s.emergencyCases || []).find(c => c.doctorId === doc.id && c.status !== 'COMPLETED');
-          const waitingRoutine = s.queueEntries.filter(q => q.doctorId === doc.id && q.status === 'Waiting' && !q.priority?.includes('Emergency') && !q.priority?.includes('P1'));
-          const nextRoutine = waitingRoutine[0] ? (s.patients.find(p => p.id === waitingRoutine[0].patientId) || { displayName: waitingRoutine[0].patientId }) : null;
+      <!-- Live Doctor Operational Cards Grid -->
+      ${docsList.length > 0 ? `
+        <div class="grid-2" style="gap: var(--space-4)">
+          ${docsList.map(doc => {
+            const op = appState.getDoctorOperationalState(doc.id);
+            const currentPatient = op?.currentPatient;
+            const assignedEm = (s.emergencyCases || []).find(c => c.doctorId === doc.id && c.status !== 'COMPLETED');
+            const waitingRoutine = s.queueEntries.filter(q => q.doctorId === doc.id && q.status === 'Waiting' && !q.priority?.includes('Emergency') && !q.priority?.includes('P1'));
+            const nextRoutine = waitingRoutine[0] ? (s.patients.find(p => p.id === waitingRoutine[0].patientId) || { displayName: waitingRoutine[0].patientId }) : null;
 
-          return `
-            <div class="card live-doctor-card animate-fade-in" style="border-left: 4px solid var(--${assignedEm ? 'critical' : op.statusVariant === 'danger' ? 'critical' : op.statusVariant === 'success' ? 'success' : op.statusVariant === 'primary' ? 'primary' : 'warning'})">
-              <div class="flex justify-between items-start" style="margin-bottom: var(--space-3)">
-                <div class="flex items-center gap-3">
-                  <div class="header-user-avatar" style="width: 44px; height: 44px; background: #F0FDF4; color: #16A34A; font-size: 16px">${getInitials(doc.displayName)}</div>
-                  <div>
-                    <h4 style="margin: 0; font-size: var(--font-size-md)">${escapeHtml(doc.displayName)}</h4>
-                    <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">
-                      ${escapeHtml(doc.department)} · Room <strong>${doc.room || 'G-04'}</strong>
+            return `
+              <div class="card live-doctor-card animate-fade-in" style="border-left: 4px solid var(--${assignedEm ? 'critical' : op.statusVariant === 'danger' ? 'critical' : op.statusVariant === 'success' ? 'success' : op.statusVariant === 'primary' ? 'primary' : 'warning'})">
+                <div class="flex justify-between items-start" style="margin-bottom: var(--space-3)">
+                  <div class="flex items-center gap-3">
+                    <div class="header-user-avatar" style="width: 44px; height: 44px; background: #F0FDF4; color: #16A34A; font-size: 16px">${getInitials(doc.displayName)}</div>
+                    <div>
+                      <h4 style="margin: 0; font-size: var(--font-size-md)">${escapeHtml(doc.displayName)}</h4>
+                      <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">
+                        ${escapeHtml(doc.department)} · Room <strong>${doc.room || 'G-04'}</strong> · <em>${escapeHtml(doc.specialty || 'General')}</em>
+                      </div>
                     </div>
                   </div>
+                  <span class="badge ${assignedEm ? 'badge-danger' : `badge-${op.statusVariant}`}">
+                    ${assignedEm ? (doc.status === 'EMERGENCY_ACTIVE' ? 'EMERGENCY_ACTIVE' : 'EMERGENCY_ASSIGNED') : op.operationalStatus}
+                  </span>
                 </div>
-                <span class="badge ${assignedEm ? 'badge-danger' : `badge-${op.statusVariant}`}">
-                  ${assignedEm ? (doc.status === 'EMERGENCY_ACTIVE' ? 'EMERGENCY_ACTIVE' : 'EMERGENCY_ASSIGNED') : op.operationalStatus}
-                </span>
-              </div>
 
-              <!-- Active Emergency Case Hero Box (Requirement 14) -->
-              ${assignedEm ? `
-                <div class="card-inner-box" style="background: #FEF2F2; border: 1px solid #FECACA; margin: var(--space-3) 0">
-                  <div class="flex justify-between items-center" style="margin-bottom: 2px">
-                    <strong style="color: #991B1B; font-size: var(--font-size-xs)"><i class="fas fa-heartbeat"></i> Current Emergency:</strong>
-                    <span class="badge badge-danger" style="font-size: 10px">${assignedEm.priority || 'P1'}</span>
-                  </div>
-                  <div style="font-weight: 700; font-size: var(--font-size-sm); color: #7F1D1D">
-                    ${escapeHtml(assignedEm.patientName)} (${assignedEm.caseId})
-                  </div>
-                  <div style="font-size: 11px; color: #991B1B; margin-top: 2px">
-                    Symptoms: "${escapeHtml(assignedEm.symptoms || 'Breathing Difficulty')}" · Next Routine: <strong>${nextRoutine ? nextRoutine.displayName : 'None'}</strong>
-                  </div>
-                </div>
-              ` : `
-                <!-- Current Patient In-Room Hero Box -->
-                <div class="card-inner-box" style="background: ${currentPatient ? '#F0FDF4' : 'var(--bg-subtle)'}; border: 1px solid ${currentPatient ? '#BBF7D0' : 'var(--border)'}; margin: var(--space-3) 0">
-                  <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 2px">Current Patient in Room:</div>
-                  ${currentPatient ? `
-                    <div style="font-weight: 700; font-size: var(--font-size-sm); color: #14532D">
-                      ${escapeHtml(currentPatient.displayName)} (Token: ${op.consultingEntry?.id || 'GM-18'})
+                <!-- Active Emergency Case Hero Box -->
+                ${assignedEm ? `
+                  <div class="card-inner-box" style="background: #FEF2F2; border: 1px solid #FECACA; margin: var(--space-3) 0">
+                    <div class="flex justify-between items-center" style="margin-bottom: 2px">
+                      <strong style="color: #991B1B; font-size: var(--font-size-xs)"><i class="fas fa-heartbeat"></i> Current Emergency:</strong>
+                      <span class="badge badge-danger" style="font-size: 10px">${assignedEm.priority || 'P1'}</span>
                     </div>
-                    <div style="font-size: 11px; color: #15803D; margin-top: 2px">
-                      Next in Queue: <strong>${op.nextPatient ? op.nextPatient.displayName : 'Queue empty'}</strong>
+                    <div style="font-weight: 700; font-size: var(--font-size-sm); color: #7F1D1D">
+                      ${escapeHtml(assignedEm.patientName)} (${assignedEm.caseId})
                     </div>
-                  ` : `
-                    <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">No patient in room · Next: <strong>${op.nextPatient ? op.nextPatient.displayName : 'Queue empty'}</strong></div>
-                  `}
-                </div>
-              `}
+                    <div style="font-size: 11px; color: #991B1B; margin-top: 2px">
+                      Symptoms: "${escapeHtml(assignedEm.symptoms || 'Breathing Difficulty')}" · Next Routine: <strong>${nextRoutine ? nextRoutine.displayName : 'None'}</strong>
+                    </div>
+                  </div>
+                ` : `
+                  <!-- Current Patient In-Room Hero Box -->
+                  <div class="card-inner-box" style="background: ${currentPatient ? '#F0FDF4' : 'var(--bg-subtle)'}; border: 1px solid ${currentPatient ? '#BBF7D0' : 'var(--border)'}; margin: var(--space-3) 0">
+                    <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 2px">Current Patient in Room:</div>
+                    ${currentPatient ? `
+                      <div style="font-weight: 700; font-size: var(--font-size-sm); color: #14532D">
+                        ${escapeHtml(currentPatient.displayName)} (Token: ${op.consultingEntry?.id || 'GM-18'})
+                      </div>
+                      <div style="font-size: 11px; color: #15803D; margin-top: 2px">
+                        Next in Queue: <strong>${op.nextPatient ? op.nextPatient.displayName : 'Queue empty'}</strong>
+                      </div>
+                    ` : `
+                      <div style="font-size: var(--font-size-xs); color: var(--text-secondary)">No patient in room · Next: <strong>${op.nextPatient ? op.nextPatient.displayName : 'Queue empty'}</strong></div>
+                    `}
+                  </div>
+                `}
 
-              <!-- Workload Progress Bar -->
-              <div style="margin: var(--space-3) 0">
-                <div class="flex justify-between" style="font-size: 11px; margin-bottom: 4px">
-                  <span>Operational Load: <strong>${assignedEm ? Math.min(100, op.loadPercentage + 35) : op.loadPercentage}%</strong></span>
-                  <span>Normal Waiting: <strong>${waitingRoutine.length} patients</strong></span>
+                <!-- Workload Progress Bar -->
+                <div style="margin: var(--space-3) 0">
+                  <div class="flex justify-between" style="font-size: 11px; margin-bottom: 4px">
+                    <span>Operational Load: <strong>${assignedEm ? Math.min(100, op.loadPercentage + 35) : op.loadPercentage}%</strong></span>
+                    <span>Normal Waiting: <strong>${waitingRoutine.length} patients</strong></span>
+                  </div>
+                  <div class="progress-bar-track">
+                    <div class="progress-bar-fill ${assignedEm ? 'red' : op.loadVariant}" style="width: ${assignedEm ? Math.min(100, op.loadPercentage + 35) : op.loadPercentage}%"></div>
+                  </div>
                 </div>
-                <div class="progress-bar-track">
-                  <div class="progress-bar-fill ${assignedEm ? 'red' : op.loadVariant}" style="width: ${assignedEm ? Math.min(100, op.loadPercentage + 35) : op.loadPercentage}%"></div>
+
+                <div class="flex justify-between" style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-bottom: var(--space-3)">
+                  <span>Completed Today: <strong>${op.completedToday}</strong></span>
+                  <span>Next Routine: <strong>${nextRoutine ? nextRoutine.displayName : 'Queue Clear'}</strong></span>
+                </div>
+
+                <!-- Action Bar -->
+                <div class="flex gap-2">
+                  <button class="btn btn-primary btn-sm" onclick="window._showDoctorDetailDrawer('${doc.id}')">
+                    <i class="fas fa-stethoscope"></i> View Doctor
+                  </button>
+                  <a href="tel:${doc.phone || '+919876543200'}" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-phone-alt"></i> Call
+                  </a>
+                  <button class="btn btn-ghost btn-sm" onclick="window._showDoctorWorkloadRebalanceModal('${doc.id}')">
+                    <i class="fas fa-balance-scale"></i> Rebalance
+                  </button>
                 </div>
               </div>
-
-              <div class="flex justify-between" style="font-size: var(--font-size-xs); color: var(--text-secondary); margin-bottom: var(--space-3)">
-                <span>Completed Today: <strong>${op.completedToday}</strong></span>
-                <span>Next Routine: <strong>${nextRoutine ? nextRoutine.displayName : 'Queue Clear'}</strong></span>
-              </div>
-
-              <!-- Action Bar -->
-              <div class="flex gap-2">
-                <button class="btn btn-primary btn-sm" onclick="window._showDoctorDetailDrawer('${doc.id}')">
-                  <i class="fas fa-stethoscope"></i> View Doctor
-                </button>
-                <a href="tel:${doc.phone || '+919876543200'}" class="btn btn-secondary btn-sm">
-                  <i class="fas fa-phone-alt"></i> Call
-                </a>
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
+            `;
+          }).join('')}
+        </div>
+      ` : `
+        <div class="card empty-state" style="padding: var(--space-8); text-align: center">
+          <i class="fas fa-user-md" style="font-size: 40px; color: var(--text-secondary); margin-bottom: 12px"></i>
+          <h4>No doctors found matching "${escapeHtml(doctorSearch)}"</h4>
+          <p style="color: var(--text-secondary); font-size: var(--font-size-xs)">Try searching by doctor name (e.g. Sharma, Mehta), ID (e.g. D-0001), or department (e.g. Cardiology).</p>
+          <button class="btn btn-secondary btn-sm" onclick="window._clearDoctorSearch()" style="margin-top: 12px">
+            <i class="fas fa-times"></i> Clear Search
+          </button>
+        </div>
+      `}
     </div>
   `;
+
+  const searchDocInput = el.querySelector('#doctor-search-input');
+  searchDocInput?.addEventListener('input', (e) => {
+    doctorSearch = e.target.value;
+    renderAdminDoctorsPage(el);
+    const updatedInput = el.querySelector('#doctor-search-input');
+    if (updatedInput) {
+      updatedInput.focus();
+      updatedInput.setSelectionRange(doctorSearch.length, doctorSearch.length);
+    }
+  });
+
+  el.querySelector('#btn-clear-doctor-search')?.addEventListener('click', () => {
+    doctorSearch = '';
+    renderAdminDoctorsPage(el);
+  });
+
+  window._clearDoctorSearch = () => {
+    doctorSearch = '';
+    renderAdminDoctorsPage(el);
+  };
 
   window._setDoctorFilter = (filter) => {
     doctorFilter = filter;

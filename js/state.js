@@ -300,18 +300,22 @@ class AppState {
     const s = this.state;
     const groups = Config.BLOOD_GROUPS;
     return groups.map(bg => {
-      const units = s.bloodInventory.filter(u => u.bloodGroup === bg && u.status === 'Available');
-      const reserved = s.bloodInventory.filter(u => u.bloodGroup === bg && u.status === 'Reserved');
-      const count = units.length;
+      const invItem = (s.bloodInventory || []).find(u => u.bloodGroup === bg && (u.facilityId === 'FAC-001' || !u.facilityId));
+      const available = invItem ? (invItem.available != null ? invItem.available : Math.max(0, (invItem.units || 0) - (invItem.reservedUnits || 0))) : 0;
+      const reservedUnits = invItem ? (invItem.reservedUnits || 0) : 0;
+      const expiringSoon = invItem ? (invItem.expiringSoon || 0) : 0;
+      const totalUnits = invItem ? (invItem.units || (available + reservedUnits)) : 0;
+
       let status = 'Adequate';
-      if (count <= Config.BLOOD_THRESHOLDS.CRITICAL) status = 'Critical';
-      else if (count <= Config.BLOOD_THRESHOLDS.LOW) status = 'Low';
+      if (available <= Config.BLOOD_THRESHOLDS.CRITICAL) status = 'Critical';
+      else if (available <= Config.BLOOD_THRESHOLDS.LOW) status = 'Low';
 
       return {
         bloodGroup: bg,
-        available: count,
-        reservedUnits: reserved.length,
-        totalUnits: count + reserved.length,
+        available,
+        reservedUnits,
+        expiringSoon,
+        totalUnits,
         status
       };
     });

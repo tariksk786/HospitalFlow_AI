@@ -123,6 +123,20 @@ const Storage = {
   },
 
   /**
+   * Save registered users dictionary
+   */
+  saveRegisteredUsers(users) {
+    return this.save('hospitalflow_registered_users', users);
+  },
+
+  /**
+   * Load registered users dictionary
+   */
+  loadRegisteredUsers() {
+    return this.load('hospitalflow_registered_users', []);
+  },
+
+  /**
    * Save entire app state alias
    */
   saveAll(state) {

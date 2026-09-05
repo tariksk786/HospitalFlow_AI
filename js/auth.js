@@ -16,22 +16,49 @@ const Auth = {
    * Initialize auth — check active session & restore verified profile
    */
   async init() {
-    if (!Config.IS_DEMO && window.supabase) {
+    // 1. Load any persisted registered users into runtime directory
+    const customUsers = Storage.loadRegisteredUsers() || [];
+    customUsers.forEach(u => {
+      if (!demoUsers.some(d => d.email?.toLowerCase() === u.email?.toLowerCase() || d.id === u.id)) {
+        demoUsers.push(u);
+      }
+      // Ensure patient is in appState.patients
+      if (u.role === 'patient' && u.patientId) {
+        const patients = appState.get().patients || [];
+        if (!patients.some(p => p.id === u.patientId || p.email === u.email)) {
+          appState.addItem('patients', {
+            id: u.patientId,
+            userId: u.id,
+            displayName: u.displayName,
+            email: u.email,
+            phone: u.phone || '+91 9800000000',
+            age: u.age || 30,
+            gender: u.gender || 'Other',
+            bloodGroup: u.bloodGroup || 'O+',
+            registeredAt: u.createdAt || new Date().toISOString()
+          });
+        }
+      }
+    });
+
+    // 2. Check Supabase Auth session if available
+    if (window.supabase) {
       try {
-        this.supabase = window.supabase.createClient(Config.SUPABASE_URL, Config.SUPABASE_ANON_KEY);
+        if (!this.supabase) {
+          this.supabase = window.supabase.createClient(Config.SUPABASE_URL, Config.SUPABASE_ANON_KEY);
+        }
         const { data: { session } } = await this.supabase.auth.getSession();
-        if (session) {
+        if (session && session.user) {
           return await this._handleSession(session);
         }
       } catch (err) {
-        console.warn('Supabase session check failed, using local profile store:', err.message);
+        console.warn('Supabase session check note:', err.message);
       }
     }
 
-    // Check for saved verified session
+    // 3. Check for saved verified session in local storage
     const savedAuth = Storage.loadAuth();
     if (savedAuth && savedAuth.id && savedAuth.role) {
-      // Re-verify from database/state user records to prevent tampering
       const verified = this._verifyUserRecord(savedAuth.email || savedAuth.id);
       if (verified && verified.role === savedAuth.role) {
         this._setCurrentUser(verified);
@@ -40,6 +67,110 @@ const Auth = {
     }
 
     return null;
+  },
+
+  /**
+   * Handle Supabase Auth Session (including Google OAuth return)
+   */
+  async _handleSession(session) {
+    if (!session || !session.user) return null;
+    const authUser = session.user;
+    const email = (authUser.email || '').toLowerCase().trim();
+    const displayName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || authUser.user_metadata?.displayName || email.split('@')[0];
+
+    // Check if existing profile
+    let profile = this._findUserByEmail(email);
+    if (!profile) {
+      const patientSeqId = generateSeqId('P', 1000 + (appState.get().patients.length + 1));
+      const newPatient = {
+        id: patientSeqId,
+        userId: authUser.id,
+        displayName: displayName,
+        email: email,
+        phone: authUser.phone || authUser.user_metadata?.phone || '+91 9876543210',
+        age: 28,
+        gender: 'Other',
+        bloodGroup: 'O+',
+        previousNoShows: 0,
+        registeredAt: new Date().toISOString()
+      };
+      appState.addItem('patients', newPatient);
+
+      profile = {
+        id: authUser.id,
+        email: email,
+        displayName: displayName,
+        role: 'patient',
+        accountStatus: 'active',
+        patientId: patientSeqId,
+        doctorId: null,
+        department: null,
+        preferred_language: 'en',
+        createdAt: new Date().toISOString()
+      };
+
+      demoUsers.push(profile);
+      const customUsers = Storage.loadRegisteredUsers() || [];
+      customUsers.push(profile);
+      Storage.saveRegisteredUsers(customUsers);
+    }
+
+    this._setCurrentUser(profile);
+    return profile;
+  },
+
+  /**
+   * Google OAuth Sign In
+   */
+  async loginWithGoogle() {
+    if (window.supabase) {
+      try {
+        if (!this.supabase) {
+          this.supabase = window.supabase.createClient(Config.SUPABASE_URL, Config.SUPABASE_ANON_KEY);
+        }
+        const { data, error } = await this.supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: window.location.origin + window.location.pathname
+          }
+        });
+        if (error) throw error;
+        return data;
+      } catch (err) {
+        console.warn('Supabase Google OAuth initialization notice:', err.message);
+      }
+    }
+
+    // Fallback demo Google account for offline/standalone testing
+    const demoEmail = 'patient.google.demo@gmail.com';
+    let demoUser = this._findUserByEmail(demoEmail);
+    if (!demoUser) {
+      const patientSeqId = generateSeqId('P', 1000 + (appState.get().patients.length + 1));
+      appState.addItem('patients', {
+        id: patientSeqId,
+        userId: 'u-google-demo',
+        displayName: 'Google Patient User',
+        email: demoEmail,
+        phone: '+91 9876543210',
+        age: 32,
+        gender: 'Male',
+        bloodGroup: 'O+',
+        registeredAt: new Date().toISOString()
+      });
+
+      demoUser = {
+        id: 'u-google-demo',
+        email: demoEmail,
+        displayName: 'Google Patient User',
+        role: 'patient',
+        accountStatus: 'active',
+        patientId: patientSeqId,
+        createdAt: new Date().toISOString()
+      };
+      demoUsers.push(demoUser);
+    }
+    this._setCurrentUser(demoUser);
+    return demoUser;
   },
 
   /**
@@ -110,6 +241,7 @@ const Auth = {
         id: patientSeqId,
         userId: userId,
         displayName: cleanName,
+        email: cleanEmail,
         phone: phone ? phone.trim() : '+91 9800000000',
         age: parseInt(age) || 30,
         gender: gender || 'Other',
@@ -133,8 +265,23 @@ const Auth = {
         createdAt: new Date().toISOString()
       };
 
-      // Save in user directory
+      // 3. Save in user directory & persistent local storage
       demoUsers.push(userProfile);
+      const customUsers = Storage.loadRegisteredUsers() || [];
+      customUsers.push(userProfile);
+      Storage.saveRegisteredUsers(customUsers);
+
+      // 4. Attempt Supabase Auth Sign Up if connected
+      if (this.supabase) {
+        this.supabase.auth.signUp({
+          email: cleanEmail,
+          password: password,
+          options: {
+            data: { displayName: cleanName, patientId: patientSeqId, role: 'patient' }
+          }
+        }).catch(err => console.warn('Supabase signup background notice:', err.message));
+      }
+
       this._setCurrentUser(userProfile);
 
       eventBus.emit(EventTypes.USER_LOGGED_IN, {
@@ -145,7 +292,7 @@ const Auth = {
       return userProfile;
     } catch (err) {
       console.error('Registration processing error:', err);
-      throw new Error('Unable to create your account. Please try again.');
+      throw new Error(err.message || 'Unable to create your account. Please try again.');
     }
   },
 
@@ -428,12 +575,16 @@ const Auth = {
     return appState.get().currentUser;
   },
 
-  // ---- Internal Helpers ----
-
   _findUserByEmail(email) {
     if (!email) return null;
     const clean = email.toLowerCase().trim();
-    // Search in demoUsers directory and doctors/patients collections
+
+    // 1. Search in persistent registered users
+    const registered = Storage.loadRegisteredUsers() || [];
+    const inRegistered = registered.find(u => (u.email && u.email.toLowerCase() === clean) || (u.id && u.id.toLowerCase() === clean));
+    if (inRegistered) return inRegistered;
+
+    // 2. Search in demoUsers directory and doctors/patients collections
     const inUsers = demoUsers.find(u => (u.email && u.email.toLowerCase() === clean) || (u.id && u.id.toLowerCase() === clean));
     if (inUsers) return inUsers;
 

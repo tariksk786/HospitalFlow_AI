@@ -75,6 +75,50 @@ export default function renderDashboard(container) {
         <!-- 1. OPERATIONAL VIEW                          -->
         <!-- ============================================ -->
 
+        <!-- Top Priority Active Emergencies (Requirement 18 & 19) -->
+        ${(s.emergencyCases || []).filter(c => c.status !== 'COMPLETED').length > 0 ? `
+          <div class="card" style="border-left: 4px solid var(--critical); margin-bottom: var(--space-6); background: #FFF5F5; border-color: rgba(239, 68, 68, 0.4)">
+            <div class="card-header flex justify-between items-center" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: var(--space-3)">
+              <div class="flex items-center gap-3">
+                <div style="width: 36px; height: 36px; border-radius: 50%; background: #FEE2E2; color: var(--critical); display: flex; align-items: center; justify-content: center; font-size: 18px">
+                  <i class="fas fa-heartbeat"></i>
+                </div>
+                <div>
+                  <h3 class="card-title" style="color: #991B1B">ACTIVE EMERGENCIES — IMMEDIATE ATTENTION REQUIRED</h3>
+                  <div class="card-subtitle" style="color: #B91C1C">High priority trauma and emergency triage cases</div>
+                </div>
+              </div>
+              <a href="#/admin/emergency" class="btn btn-danger btn-sm">
+                <i class="fas fa-shield-alt"></i> Open Emergency Command
+              </a>
+            </div>
+
+            <div class="grid-2" style="gap: var(--space-3); margin-top: var(--space-4)">
+              ${(s.emergencyCases || []).filter(c => c.status !== 'COMPLETED').map(ec => `
+                <div class="card-inner-box" style="background: white; border: 1px solid rgba(239, 68, 68, 0.3); margin: 0">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <div class="flex items-center gap-2" style="margin-bottom: 4px">
+                        <span class="badge badge-danger">${ec.priority || 'P1 CRITICAL'}</span>
+                        <strong style="font-size: var(--font-size-md)">${escapeHtml(ec.patientName)}</strong>
+                        <span style="font-size: 11px; color: var(--text-secondary)">(${ec.patientId || ec.caseId})</span>
+                      </div>
+                      <div style="font-size: var(--font-size-xs); color: var(--text-secondary); line-height: 1.6">
+                        <strong>Symptoms:</strong> "${escapeHtml(ec.symptoms || 'Severe Distress')}"<br>
+                        <strong>Status:</strong> ${escapeHtml(ec.status || 'Incoming')} · <strong>ETA:</strong> ${ec.etaMinutes ? `${ec.etaMinutes} min` : 'In Trauma Bay'}<br>
+                        <strong>Assigned Doctor:</strong> ${ec.doctorId ? `<strong style="color: var(--success)">Dr. ${escapeHtml(ec.doctorName || ec.doctorId)}</strong>` : '<strong style="color: var(--critical)">Doctor Not Assigned</strong>'}
+                      </div>
+                    </div>
+                    <button class="btn btn-danger btn-sm" onclick="window.HospitalFlow.router.navigate('/admin/emergency')">
+                      ${ec.doctorId ? '<i class="fas fa-eye"></i> View' : '<i class="fas fa-user-plus"></i> Assign Doctor'}
+                    </button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+
         <!-- 4 Core Data KPIs -->
         <div class="grid-4" style="margin-bottom: var(--space-6)">
           <!-- 1. Active Emergencies -->
