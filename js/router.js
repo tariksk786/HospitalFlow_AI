@@ -29,6 +29,12 @@ const Router = {
    */
   getHashRoute() {
     let hash = window.location.hash.replace('#', '').trim();
+    if (hash.startsWith('access_token=') || hash.includes('access_token=') || hash.startsWith('error=') || hash.includes('error_description=')) {
+      const user = Auth.getCurrentUser();
+      if (!user) return '/login';
+      return user.role === 'patient' ? '/patient/home' :
+        user.role === 'doctor' ? '/doctor/dashboard' : '/admin/command';
+    }
     if (!hash || hash === '') {
       const user = Auth.getCurrentUser();
       if (!user) return '/login';

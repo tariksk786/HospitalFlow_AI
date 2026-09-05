@@ -47,9 +47,21 @@ const Auth = {
         if (!this.supabase) {
           this.supabase = window.supabase.createClient(Config.SUPABASE_URL, Config.SUPABASE_ANON_KEY);
         }
+
+        // Listen for OAuth sign-in / token refresh events
+        this.supabase.auth.onAuthStateChange(async (event, session) => {
+          if (session && session.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'INITIAL_SESSION')) {
+            const userProfile = await this._handleSession(session);
+            if (userProfile && (window.location.hash.includes('access_token') || window.location.search.includes('code='))) {
+              window.location.hash = userProfile.role === 'patient' ? '/patient/home' : '/admin/command';
+            }
+          }
+        });
+
         const { data: { session } } = await this.supabase.auth.getSession();
         if (session && session.user) {
-          return await this._handleSession(session);
+          const profile = await this._handleSession(session);
+          if (profile) return profile;
         }
       } catch (err) {
         console.warn('Supabase session check note:', err.message);
@@ -124,21 +136,29 @@ const Auth = {
    */
   async loginWithGoogle() {
     if (window.supabase) {
-      try {
-        if (!this.supabase) {
-          this.supabase = window.supabase.createClient(Config.SUPABASE_URL, Config.SUPABASE_ANON_KEY);
-        }
-        const { data, error } = await this.supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: window.location.origin + window.location.pathname
-          }
-        });
-        if (error) throw error;
-        return data;
-      } catch (err) {
-        console.warn('Supabase Google OAuth initialization notice:', err.message);
+      if (!this.supabase) {
+        this.supabase = window.supabase.createClient(Config.SUPABASE_URL, Config.SUPABASE_ANON_KEY);
       }
+      const redirectTo = window.location.origin + window.location.pathname;
+      const { data, error } = await this.supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account'
+          }
+        }
+      });
+      if (error) {
+        console.error('Supabase Google OAuth error:', error);
+        throw new Error(error.message || 'Google OAuth failed');
+      }
+      if (data && data.url) {
+        window.location.href = data.url;
+        return data;
+      }
+      return data;
     }
 
     // Fallback demo Google account for offline/standalone testing
