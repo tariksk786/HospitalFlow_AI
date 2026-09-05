@@ -338,6 +338,8 @@ class SupabaseSyncEngine {
    */
   _wireLocalEventBus() {
     const broadcastEventTypes = [
+      EventTypes.USER_LOGGED_IN,
+      EventTypes.USER_REGISTERED,
       EventTypes.EMERGENCY_CASE_CREATED,
       EventTypes.EMERGENCY_PREARRIVAL_CREATED,
       EventTypes.EMERGENCY_CASE_ASSIGNED,
@@ -349,10 +351,12 @@ class SupabaseSyncEngine {
       EventTypes.BLOOD_UNITS_RESERVED,
       EventTypes.BLOOD_CONFIRMED_BY_BANK,
       EventTypes.PATIENT_CHECKED_IN,
+      EventTypes.APPOINTMENT_BOOKED,
       EventTypes.QUEUE_ENTRY_CREATED,
       EventTypes.PATIENT_CALLED,
       EventTypes.CONSULTATION_STARTED,
       EventTypes.CONSULTATION_COMPLETED,
+      EventTypes.CARE_PLAN_CREATED,
       EventTypes.AMBULANCE_REQUEST_CREATED,
       EventTypes.AMBULANCE_DISPATCHED,
       EventTypes.AMBULANCE_ARRIVED,
@@ -361,6 +365,9 @@ class SupabaseSyncEngine {
 
     broadcastEventTypes.forEach(evtType => {
       eventBus.on(evtType, (event) => {
+        // Automatically persist to Supabase tables
+        this._persistToDatabase(evtType, event.payload, event);
+
         // Do not re-broadcast events that originated from remote Realtime sync
         if (event.isRemote || event.source === 'supabase-realtime') return;
 
@@ -374,10 +381,74 @@ class SupabaseSyncEngine {
   }
 
   /**
+   * Smooth database sync across Supabase tables
+   */
+  async _persistToDatabase(type, payload = {}, event = {}) {
+    if (!this.supabase) return;
+
+    try {
+      // 1. User Logins & Registrations -> profiles / users
+      if (type === EventTypes.USER_LOGGED_IN || type === EventTypes.USER_REGISTERED) {
+        const user = payload.user || payload;
+        if (user && user.email) {
+          await this.supabase.from('profiles').upsert({
+            id: user.id || generateId('usr'),
+            email: user.email.toLowerCase(),
+            display_name: user.displayName || user.name || 'User',
+            role: user.role || 'patient',
+            phone: user.phone || null,
+            last_sign_in_at: new Date().toISOString()
+          }, { onConflict: 'email' }).catch(() => {});
+        }
+      }
+
+      // 2. Emergency Cases -> emergency_cases
+      if (type === EventTypes.EMERGENCY_CASE_CREATED || type === EventTypes.EMERGENCY_PREARRIVAL_CREATED) {
+        await this.supabase.from('emergency_cases').upsert({
+          id: payload.caseId || payload.id,
+          patient_name: payload.patientName,
+          priority: payload.priority || 'P1 - Critical Emergency',
+          department: payload.department || 'General Medicine',
+          symptoms: payload.symptoms,
+          transport_mode: payload.transportMode || 'Private Vehicle',
+          status: payload.status || 'AWAITING_DOCTOR',
+          created_at: payload.createdAt || new Date().toISOString()
+        }, { onConflict: 'id' }).catch(() => {});
+      }
+
+      // 3. Appointments -> appointments
+      if (type === EventTypes.APPOINTMENT_BOOKED || payload.appointmentId) {
+        await this.supabase.from('appointments').upsert({
+          id: payload.id || payload.appointmentId || generateId('APT'),
+          patient_id: payload.patientId,
+          doctor_id: payload.doctorId,
+          department: payload.department,
+          scheduled_time: payload.scheduledTime,
+          symptoms: payload.symptoms || payload.symptom_original_text,
+          status: payload.status || 'Scheduled'
+        }, { onConflict: 'id' }).catch(() => {});
+      }
+
+      // 4. Care Plans -> discharge_plans
+      if (type === EventTypes.CARE_PLAN_CREATED || payload.planId) {
+        await this.supabase.from('discharge_plans').upsert({
+          id: payload.planId || payload.id,
+          patient_id: payload.patientId,
+          doctor_name: payload.doctorName,
+          active: true,
+          created_at: new Date().toISOString()
+        }, { onConflict: 'id' }).catch(() => {});
+      }
+    } catch (e) {
+      // Non-blocking graceful catch
+    }
+  }
+
+  /**
    * Save audit event to Supabase table public.audit_events (if table exists and connected)
    */
   async _persistAuditEvent(msg) {
-    if (!this.supabase || !this.isConnected) return;
+    if (!this.supabase) return;
     try {
       await this.supabase.from('audit_events').insert({
         id: msg.eventId,
@@ -387,7 +458,7 @@ class SupabaseSyncEngine {
         source: msg.senderRole,
         user_id: msg.senderUserId,
         entity_id: msg.payload?.caseId || msg.payload?.patientId || msg.payload?.id || null
-      });
+      }).catch(() => {});
     } catch {
       // Non-blocking catch for standalone mode
     }

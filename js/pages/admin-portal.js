@@ -206,6 +206,10 @@ export function renderAdminPortal(container, subRoute = 'command') {
   const unsubscribeState = appState.subscribe(() => {
     updateAlarmBadgeAndBanner();
     if (['patients', 'doctors', 'command', 'emergency'].includes(subRoute)) {
+      // NEVER re-render if any modal is currently open in the DOM
+      if (document.querySelector('.modal-backdrop') || document.querySelector('.modal.active') || document.querySelector('.modal')) {
+        return;
+      }
       const active = document.activeElement;
       if (active && (active.tagName === 'INPUT' || active.tagName === 'SELECT' || active.tagName === 'TEXTAREA')) {
         return; // Don't interrupt user typing
@@ -222,7 +226,9 @@ export function renderAdminPortal(container, subRoute = 'command') {
         alertManager.playEmergencyChime('P1');
       }
       updateAlarmBadgeAndBanner();
-      if (['emergency', 'command'].includes(subRoute)) renderCurrentSubRoute();
+      if (['emergency', 'command'].includes(subRoute) && !document.querySelector('.modal-backdrop') && !document.querySelector('.modal.active')) {
+        renderCurrentSubRoute();
+      }
     }),
     eventBus.on(EventTypes.EMERGENCY_PREARRIVAL_CREATED, (event) => {
       alertManager.ensureAudioUnlocked();
@@ -231,7 +237,9 @@ export function renderAdminPortal(container, subRoute = 'command') {
         alertManager.speakAlert(`Emergency pre-arrival alert. ${event?.payload?.patientName || 'Emergency patient'} incoming.`);
       }, 350);
       updateAlarmBadgeAndBanner();
-      if (['emergency', 'command'].includes(subRoute)) renderCurrentSubRoute();
+      if (['emergency', 'command'].includes(subRoute) && !document.querySelector('.modal-backdrop') && !document.querySelector('.modal.active')) {
+        renderCurrentSubRoute();
+      }
     }),
     eventBus.on(EventTypes.EMERGENCY_CASE_CREATED, (event) => {
       alertManager.ensureAudioUnlocked();
@@ -240,7 +248,9 @@ export function renderAdminPortal(container, subRoute = 'command') {
         alertManager.speakAlert(`Critical emergency case detected. ${event?.payload?.patientName || 'Patient'} requires immediate attention.`);
       }, 350);
       updateAlarmBadgeAndBanner();
-      if (['emergency', 'command'].includes(subRoute)) renderCurrentSubRoute();
+      if (['emergency', 'command'].includes(subRoute) && !document.querySelector('.modal-backdrop') && !document.querySelector('.modal.active')) {
+        renderCurrentSubRoute();
+      }
     }),
     eventBus.on(EventTypes.AMBULANCE_REQUEST_CREATED, (event) => {
       alertManager.ensureAudioUnlocked();
@@ -249,7 +259,9 @@ export function renderAdminPortal(container, subRoute = 'command') {
         alertManager.speakAlert('Emergency ambulance request received. Immediate attention required.');
       }, 350);
       updateAlarmBadgeAndBanner();
-      if (['emergency', 'command'].includes(subRoute)) renderCurrentSubRoute();
+      if (['emergency', 'command'].includes(subRoute) && !document.querySelector('.modal-backdrop') && !document.querySelector('.modal.active')) {
+        renderCurrentSubRoute();
+      }
     }),
     eventBus.on(EventTypes.EMERGENCY_ALERT_ACKNOWLEDGED, () => {
       updateAlarmBadgeAndBanner();

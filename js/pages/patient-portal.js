@@ -218,17 +218,23 @@ export function renderPatientPortal(container, subRoute = 'home') {
 
   renderCurrentSubRoute();
 
-  // Reactive subscription for zero-refresh operational synchronization
+  // Reactive subscription for zero-refresh operational synchronization (protected from destroying modals)
   const unsubscribeState = appState.subscribe(() => {
-    if (document.body.contains(subContentEl)) {
-      if (subRoute === 'emergency-status') {
-        const active = document.activeElement;
-        if (active && (active.id?.startsWith('pre-') || active.id?.startsWith('amb-'))) {
-          return; // Avoid destroying form while user is actively entering emergency information
-        }
-      }
-      renderCurrentSubRoute();
+    if (!document.body.contains(subContentEl)) return;
+    if (document.querySelector('.modal-backdrop') || document.querySelector('.modal.active') || document.querySelector('.modal')) {
+      return; // Never re-render while patient is booking appointment or interacting with modal
     }
+    if (subRoute === 'emergency-status') {
+      const active = document.activeElement;
+      if (active && (active.id?.startsWith('pre-') || active.id?.startsWith('amb-'))) {
+        return; // Avoid destroying form while user is actively entering emergency information
+      }
+    }
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'SELECT' || active.tagName === 'TEXTAREA')) {
+      return; // Do not interrupt user typing
+    }
+    renderCurrentSubRoute();
   });
 
   // Clean up observer
@@ -1755,7 +1761,7 @@ window._showAppointmentQRModal = (appointmentId) => {
   }
 };
 
-// Book New Appointment Modal
+// Book New Appointment Modal with Multilingual AI Symptom Translator
 window._showBookAppointmentModal = (patientId) => {
   const s = appState.get();
   const modalRoot = document.getElementById('patient-modal-root') || document.body;
@@ -1764,20 +1770,60 @@ window._showBookAppointmentModal = (patientId) => {
 
   modalRoot.innerHTML = `
     <div class="modal-backdrop active">
-      <div class="modal active" style="max-width: 560px">
-        <div class="modal-header">
-          <h3 class="modal-title" style="color: var(--primary)"><i class="fas fa-calendar-plus"></i> ${t('patient.book_new_apt') || 'Book New Consultation'}</h3>
+      <div class="modal active" style="max-width: 620px; max-height: 90vh; overflow-y: auto">
+        <div class="modal-header" style="border-bottom: 2px solid var(--primary-100)">
+          <div>
+            <h3 class="modal-title" style="color: var(--primary)"><i class="fas fa-calendar-plus"></i> ${t('patient.book_new_apt') || 'Book New Consultation'}</h3>
+            <div class="card-subtitle">AI Multilingual Symptom Normalizer & Clinical Routing</div>
+          </div>
           <button class="modal-close" onclick="this.closest('.modal-backdrop').remove()">&times;</button>
         </div>
         <form id="patient-book-apt-form">
           <div class="modal-body">
             <div class="form-group">
-              <label class="form-label">Patient</label>
+              <label class="form-label">Patient Identity</label>
               <input type="text" class="form-input" value="${escapeHtml(pt.displayName)} (${pt.id})" disabled style="background: var(--bg-subtle)">
             </div>
+
+            <!-- Reported Symptoms / Reason for Visit -->
+            <div class="form-group">
+              <div class="flex justify-between items-center" style="margin-bottom: 6px">
+                <label class="form-label" style="font-weight: 700; color: var(--primary); margin: 0">
+                  <i class="fas fa-language"></i> Describe Symptoms / तकलीफ बताएं (Hindi / English) <span class="required">*</span>
+                </label>
+                <span class="badge badge-teal" style="font-size: 10px"><i class="fas fa-robot"></i> AI Auto-Translate & Clinical Triage</span>
+              </div>
+              <textarea id="book-symptoms" class="form-textarea" rows="2" placeholder="e.g. 2 din se tez bukhar, khasi aur gale me dard hai (or in English: High fever and sore throat)" required></textarea>
+
+              <!-- Quick Common Symptom Tag Chips -->
+              <div style="margin-top: 8px">
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px">Quick Symptom Tags (Click to Add):</div>
+                <div class="flex flex-wrap gap-1" id="symptom-tag-chips">
+                  <button type="button" class="badge" style="cursor: pointer; background: var(--bg-subtle); border: 1px solid var(--border)" data-symptom="Fever (बुखार)">+ Fever / बुखार</button>
+                  <button type="button" class="badge" style="cursor: pointer; background: var(--bg-subtle); border: 1px solid var(--border)" data-symptom="Cough (खांसी)">+ Cough / खांसी</button>
+                  <button type="button" class="badge" style="cursor: pointer; background: var(--bg-subtle); border: 1px solid var(--border)" data-symptom="Headache (सिर दर्द)">+ Headache / सिर दर्द</button>
+                  <button type="button" class="badge" style="cursor: pointer; background: var(--bg-subtle); border: 1px solid var(--border)" data-symptom="Abdominal Pain (पेट दर्द)">+ Stomach Pain / पेट दर्द</button>
+                  <button type="button" class="badge" style="cursor: pointer; background: var(--bg-subtle); border: 1px solid var(--border)" data-symptom="Chest Pain (सीने में दर्द)">+ Chest Pain / सीने में दर्द</button>
+                  <button type="button" class="badge" style="cursor: pointer; background: var(--bg-subtle); border: 1px solid var(--border)" data-symptom="Vomiting (उल्टी)">+ Vomiting / उल्टी</button>
+                  <button type="button" class="badge" style="cursor: pointer; background: var(--bg-subtle); border: 1px solid var(--border)" data-symptom="Skin Rash (त्वचा पर चकत्ते)">+ Rash / खुजली</button>
+                </div>
+              </div>
+
+              <!-- Real-Time AI Normalization & Translation Preview Box -->
+              <div id="ai-symptom-preview" style="display: none; margin-top: 10px; padding: 10px 14px; background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 8px">
+                <div class="flex items-center gap-2" style="margin-bottom: 4px">
+                  <i class="fas fa-brain" style="color: #166534"></i>
+                  <strong style="font-size: 12px; color: #166534">AI Clinical Standardization & Translation:</strong>
+                  <span id="ai-lang-badge" class="badge badge-success" style="font-size: 10px; margin-left: auto">Hindi Detected</span>
+                </div>
+                <div id="ai-clinical-text" style="font-size: 12px; font-weight: 600; color: #14532D; margin-bottom: 6px"></div>
+                <div class="flex flex-wrap gap-1 items-center" id="ai-concepts-container"></div>
+              </div>
+            </div>
+
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">Clinical Department <span class="required">*</span></label>
+                <label class="form-label">Recommended Department <span class="required">*</span></label>
                 <select id="book-dept-select" class="form-select" required>
                   ${Config.DEPARTMENTS.map(d => `<option value="${d}">${d}</option>`).join('')}
                 </select>
@@ -1789,6 +1835,7 @@ window._showBookAppointmentModal = (patientId) => {
                 </select>
               </div>
             </div>
+
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Consultation Date <span class="required">*</span></label>
@@ -1807,10 +1854,6 @@ window._showBookAppointmentModal = (patientId) => {
                 </select>
               </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">Reported Symptoms / Reason for Visit <span class="required">*</span></label>
-              <textarea id="book-symptoms" class="form-textarea" rows="2" placeholder="e.g. Mild fever, dry cough, body ache since 2 days" required></textarea>
-            </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-backdrop').remove()">Cancel</button>
@@ -1821,22 +1864,92 @@ window._showBookAppointmentModal = (patientId) => {
     </div>
   `;
 
-  // Filter doctor select when department changes
+  // Elements
   const deptSelect = modalRoot.querySelector('#book-dept-select');
   const docSelect = modalRoot.querySelector('#book-doc-select');
-  deptSelect?.addEventListener('change', () => {
-    const selectedDept = deptSelect.value;
+  const symptomsInput = modalRoot.querySelector('#book-symptoms');
+  const aiPreview = modalRoot.querySelector('#ai-symptom-preview');
+  const aiLangBadge = modalRoot.querySelector('#ai-lang-badge');
+  const aiClinicalText = modalRoot.querySelector('#ai-clinical-text');
+  const aiConcepts = modalRoot.querySelector('#ai-concepts-container');
+
+  // Filter doctor select when department changes
+  const updateDoctorList = (selectedDept) => {
     const filteredDocs = s.doctors.filter(d => d.department === selectedDept);
     docSelect.innerHTML = (filteredDocs.length > 0 ? filteredDocs : s.doctors).map(doc =>
       `<option value="${doc.id}">Dr. ${escapeHtml(doc.displayName)} (${doc.department})</option>`
     ).join('');
+  };
+
+  deptSelect?.addEventListener('change', () => {
+    updateDoctorList(deptSelect.value);
   });
 
+  // Multilingual Symptom Analysis & Translation logic
+  const handleSymptomAnalysis = () => {
+    const raw = symptomsInput.value.trim();
+    if (!raw) {
+      aiPreview.style.display = 'none';
+      return;
+    }
+
+    const analysis = SymptomNormalizer.normalize(raw);
+    aiPreview.style.display = 'block';
+
+    if (analysis.detectedLanguage === 'hi') {
+      aiLangBadge.textContent = 'Hindi / Hinglish Detected';
+      aiLangBadge.className = 'badge badge-warning';
+    } else {
+      aiLangBadge.textContent = 'English Clinical';
+      aiLangBadge.className = 'badge badge-success';
+    }
+
+    const concepts = SymptomNormalizer.getLocalizedLabels(analysis.normalizedSymptoms);
+    const conceptNames = concepts.map(c => c.label).join(', ');
+
+    aiClinicalText.innerHTML = `
+      <span>Clinical English: <strong>"${escapeHtml(conceptNames ? `Reported ${conceptNames} with clinical symptoms` : raw)}"</strong></span>
+      ${analysis.isEmergency ? `<div style="color: var(--critical); font-size: 11px; margin-top: 2px">⚠️ Severe / urgent symptom detected</div>` : ''}
+    `;
+
+    aiConcepts.innerHTML = `
+      <span style="font-size: 11px; color: #166534">Concepts:</span>
+      ${concepts.length > 0 ? concepts.map(c => `
+        <span class="badge badge-primary" style="font-size: 10px"><i class="fas fa-check"></i> ${c.label}</span>
+      `).join('') : `<span class="badge badge-neutral" style="font-size: 10px">General Consultation</span>`}
+      <span class="badge badge-teal" style="font-size: 10px; margin-left: auto">Suggested Dept: ${analysis.suggestedDepartment}</span>
+    `;
+
+    // Auto-select recommended department if matched
+    if (analysis.suggestedDepartment && analysis.suggestedDepartment !== deptSelect.value) {
+      if ([...deptSelect.options].some(opt => opt.value === analysis.suggestedDepartment)) {
+        deptSelect.value = analysis.suggestedDepartment;
+        updateDoctorList(analysis.suggestedDepartment);
+      }
+    }
+  };
+
+  symptomsInput?.addEventListener('input', handleSymptomAnalysis);
+
+  // Quick symptom tag chip clicks
+  modalRoot.querySelectorAll('#symptom-tag-chips button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sym = btn.dataset.symptom;
+      if (symptomsInput.value.trim()) {
+        symptomsInput.value += `, ${sym}`;
+      } else {
+        symptomsInput.value = sym;
+      }
+      handleSymptomAnalysis();
+    });
+  });
+
+  // Submit appointment booking
   modalRoot.querySelector('#patient-book-apt-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const department = deptSelect.value;
     const doctorId = docSelect.value;
-    const symptoms = modalRoot.querySelector('#book-symptoms').value;
+    const symptoms = symptomsInput.value;
     const timeSlot = modalRoot.querySelector('#book-slot-select').value;
     const dateStr = modalRoot.querySelector('#book-date').value;
 

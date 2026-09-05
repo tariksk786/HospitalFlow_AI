@@ -185,11 +185,17 @@ export function renderDoctorPortal(container, subRoute = 'dashboard') {
 
   renderSubRouteView();
 
-  // Reactive state sync for doctor portal
+  // Reactive state sync for doctor portal (protected against destroying active modals & forms)
   const unsubscribeState = appState.subscribe(() => {
-    if (document.body.contains(subContentEl)) {
-      renderSubRouteView();
+    if (!document.body.contains(subContentEl)) return;
+    if (document.querySelector('.modal-backdrop') || document.querySelector('.modal.active') || document.querySelector('.modal')) {
+      return; // Do not re-render while doctor is authoring a care plan or interacting with any modal
     }
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'SELECT' || active.tagName === 'TEXTAREA')) {
+      return; // Do not interrupt user typing
+    }
+    renderSubRouteView();
   });
 
   // Clean up observer
