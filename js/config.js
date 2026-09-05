@@ -4,7 +4,7 @@
 
 const Config = {
   // Supabase configuration — set these for Connected Mode
-  SUPABASE_URL: 'https://caivskzmheqdsvhjalfi.supabase.co',
+  SUPABASE_URL: 'https://caivskzmhegdsvhjalfi.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_2qrOk7jSVGxhya_1DEsjRA_mA7P8jWY',
 
   // Application settings

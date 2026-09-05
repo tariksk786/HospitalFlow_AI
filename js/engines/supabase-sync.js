@@ -387,57 +387,57 @@ class SupabaseSyncEngine {
     if (!this.supabase) return;
 
     try {
-      // 1. User Logins & Registrations -> profiles / users
+      // 1. User Logins & Registrations -> public.users
       if (type === EventTypes.USER_LOGGED_IN || type === EventTypes.USER_REGISTERED) {
         const user = payload.user || payload;
         if (user && user.email) {
-          await this.supabase.from('profiles').upsert({
-            id: user.id || generateId('usr'),
-            email: user.email.toLowerCase(),
-            display_name: user.displayName || user.name || 'User',
+          const cleanEmail = user.email.toLowerCase().trim();
+          await this.supabase.from('users').upsert({
+            id: user.id || generateId('u'),
+            email: cleanEmail,
+            display_name: user.displayName || user.name || cleanEmail.split('@')[0],
             role: user.role || 'patient',
-            phone: user.phone || null,
-            last_sign_in_at: new Date().toISOString()
-          }, { onConflict: 'email' }).catch(() => {});
+            department: user.department || null,
+            phone: user.phone || '+91 9800000000',
+            account_status: 'active'
+          }, { onConflict: 'email' }).catch(err => {
+            console.warn('[SupabaseSync] users table upsert notice:', err?.message);
+          });
         }
       }
 
-      // 2. Emergency Cases -> emergency_cases
-      if (type === EventTypes.EMERGENCY_CASE_CREATED || type === EventTypes.EMERGENCY_PREARRIVAL_CREATED) {
-        await this.supabase.from('emergency_cases').upsert({
-          id: payload.caseId || payload.id,
-          patient_name: payload.patientName,
-          priority: payload.priority || 'P1 - Critical Emergency',
-          department: payload.department || 'General Medicine',
-          symptoms: payload.symptoms,
-          transport_mode: payload.transportMode || 'Private Vehicle',
-          status: payload.status || 'AWAITING_DOCTOR',
-          created_at: payload.createdAt || new Date().toISOString()
-        }, { onConflict: 'id' }).catch(() => {});
-      }
-
-      // 3. Appointments -> appointments
+      // 2. Appointments -> public.appointments
       if (type === EventTypes.APPOINTMENT_BOOKED || payload.appointmentId) {
+        const aptId = payload.id || payload.appointmentId || generateId('APT');
         await this.supabase.from('appointments').upsert({
-          id: payload.id || payload.appointmentId || generateId('APT'),
-          patient_id: payload.patientId,
-          doctor_id: payload.doctorId,
-          department: payload.department,
-          scheduled_time: payload.scheduledTime,
-          symptoms: payload.symptoms || payload.symptom_original_text,
+          id: aptId,
+          patient_id: payload.patientId || 'P-1001',
+          doctor_id: payload.doctorId || 'D0001',
+          department: payload.department || 'General Medicine',
+          scheduled_time: payload.scheduledTime || new Date().toISOString(),
+          symptom_original_text: payload.symptoms || payload.symptom_original_text || '',
+          symptom_detected_language: payload.detectedLanguage || 'en',
+          normalized_symptoms: payload.normalizedSymptoms || [],
           status: payload.status || 'Scheduled'
-        }, { onConflict: 'id' }).catch(() => {});
+        }, { onConflict: 'id' }).catch(err => {
+          console.warn('[SupabaseSync] appointments table upsert notice:', err?.message);
+        });
       }
 
-      // 4. Care Plans -> discharge_plans
+      // 3. Care Plans -> public.discharge_plans
       if (type === EventTypes.CARE_PLAN_CREATED || payload.planId) {
         await this.supabase.from('discharge_plans').upsert({
-          id: payload.planId || payload.id,
-          patient_id: payload.patientId,
-          doctor_name: payload.doctorName,
-          active: true,
-          created_at: new Date().toISOString()
-        }, { onConflict: 'id' }).catch(() => {});
+          id: payload.planId || payload.id || generateId('DP'),
+          patient_id: payload.patientId || 'P-1001',
+          approved_by: payload.doctorId || payload.approvedBy || 'D0001',
+          discharge_date: new Date().toISOString(),
+          medications: payload.medications || [],
+          instructions: payload.instructions || payload.dietPlan || '',
+          language: payload.language || 'English',
+          active: true
+        }, { onConflict: 'id' }).catch(err => {
+          console.warn('[SupabaseSync] discharge_plans table upsert notice:', err?.message);
+        });
       }
     } catch (e) {
       // Non-blocking graceful catch

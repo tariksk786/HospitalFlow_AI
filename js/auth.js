@@ -42,11 +42,26 @@ const Auth = {
       }
     });
 
-    // 2. Check Supabase Auth session if available
+    // 2. Check Supabase Auth session & sync existing registered users
     if (window.supabase) {
       try {
         if (!this.supabase) {
           this.supabase = window.supabase.createClient(Config.SUPABASE_URL, Config.SUPABASE_ANON_KEY);
+        }
+
+        // Sync all local registered users to Supabase users table
+        if (customUsers.length > 0) {
+          customUsers.forEach(cu => {
+            this.supabase.from('users').upsert({
+              id: cu.id,
+              email: cu.email ? cu.email.toLowerCase().trim() : '',
+              display_name: cu.displayName,
+              role: cu.role || 'patient',
+              department: cu.department || null,
+              phone: cu.phone || '+91 9800000000',
+              account_status: 'active'
+            }, { onConflict: 'email' }).catch(() => {});
+          });
         }
 
         // Listen for OAuth sign-in / token refresh events
@@ -279,8 +294,36 @@ const Auth = {
       customUsers.push(userProfile);
       Storage.saveRegisteredUsers(customUsers);
 
-      // 4. Attempt Supabase Auth Sign Up if connected
+      // 4. Persist to Supabase database (users table & patients table)
       if (this.supabase) {
+        // Upsert into public.users table
+        this.supabase.from('users').upsert({
+          id: userId,
+          email: cleanEmail,
+          display_name: cleanName,
+          role: 'patient',
+          department: null,
+          phone: phone ? phone.trim() : '+91 9800000000',
+          account_status: 'active'
+        }, { onConflict: 'email' }).then(({ error }) => {
+          if (error) console.warn('Supabase users table upsert note:', error.message);
+          else console.log(`%c [Supabase] Saved user ${cleanEmail} to users table `, 'background: #059669; color: white; padding: 2px 6px; border-radius: 4px;');
+        }).catch(() => {});
+
+        // Upsert into public.patients table
+        this.supabase.from('patients').upsert({
+          id: patientSeqId,
+          user_id: userId,
+          display_name: cleanName,
+          phone: phone ? phone.trim() : '+91 9800000000',
+          age: parseInt(age) || 30,
+          gender: gender || 'Other',
+          blood_group: bloodGroup || 'O+'
+        }, { onConflict: 'id' }).catch(err => {
+          console.warn('Supabase patients table upsert note:', err?.message);
+        });
+
+        // Also attempt Supabase Auth Sign Up
         this.supabase.auth.signUp({
           email: cleanEmail,
           password: password,
@@ -292,7 +335,14 @@ const Auth = {
 
       this._setCurrentUser(userProfile);
 
+      eventBus.emit(EventTypes.USER_REGISTERED, {
+        user: userProfile,
+        displayName: userProfile.displayName,
+        role: 'patient'
+      }, { source: 'auth', userId: userProfile.id });
+
       eventBus.emit(EventTypes.USER_LOGGED_IN, {
+        user: userProfile,
         displayName: userProfile.displayName,
         role: 'patient'
       }, { source: 'auth', userId: userProfile.id });
@@ -398,13 +448,28 @@ const Auth = {
     // 4. Initialize role-scoped session
     this._setCurrentUser(user);
 
+    if (this.supabase && user.email) {
+      this.supabase.from('users').upsert({
+        id: user.id || `u-${Date.now()}`,
+        email: user.email.toLowerCase().trim(),
+        display_name: user.displayName || user.email.split('@')[0],
+        role: user.role || 'patient',
+        department: user.department || null,
+        phone: user.phone || '+91 9800000000',
+        account_status: 'active'
+      }, { onConflict: 'email' }).catch(err => {
+        console.warn('Supabase login sync notice:', err?.message);
+      });
+    }
+
     try {
       alertManager.ensureAudioUnlocked();
     } catch (e) {}
 
     eventBus.emit(EventTypes.USER_LOGGED_IN, {
       displayName: user.displayName,
-      role: user.role
+      role: user.role,
+      user: user
     }, { source: 'auth', userId: user.id });
 
     return user;
