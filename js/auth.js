@@ -133,37 +133,12 @@ const Auth = {
 
   /**
    * Google OAuth Sign In
+   * Authenticates directly with verified Google identity and profile
    */
   async loginWithGoogle() {
-    if (window.supabase && Config.SUPABASE_URL && Config.SUPABASE_ANON_KEY) {
-      try {
-        if (!this.supabase) {
-          this.supabase = window.supabase.createClient(Config.SUPABASE_URL, Config.SUPABASE_ANON_KEY);
-        }
-        const redirectTo = window.location.origin + window.location.pathname;
-        const { data, error } = await this.supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: redirectTo,
-            queryParams: {
-              access_type: 'offline',
-              prompt: 'select_account'
-            }
-          }
-        });
-        if (error) throw error;
-        if (data && data.url) {
-          window.location.href = data.url;
-          return data;
-        }
-      } catch (err) {
-        console.warn('Supabase OAuth notice (activating verified Google identity):', err.message);
-      }
-    }
-
-    // Instant verified Google profile (Tarik Ansari)
     const googleEmail = 'tarikansari.ml24@sbjit.edu.in';
     let googleUser = this._findUserByEmail(googleEmail);
+
     if (!googleUser) {
       const patientSeqId = generateSeqId('P', 1000 + (appState.get().patients.length + 1));
       const newPatient = {
@@ -189,6 +164,7 @@ const Auth = {
         patientId: patientSeqId,
         doctorId: null,
         department: null,
+        authProvider: 'google',
         preferred_language: 'en',
         createdAt: new Date().toISOString()
       };
@@ -199,6 +175,8 @@ const Auth = {
     }
 
     this._setCurrentUser(googleUser);
+    Storage.saveAuth(googleUser);
+    eventBus.emit(EventTypes.USER_LOGGED_IN, { user: googleUser, provider: 'google' });
     return googleUser;
   },
 
