@@ -213,19 +213,38 @@ export function renderAdminPortal(container, subRoute = 'command') {
 
   // Listen to remote realtime emergency events
   const unsubsEvents = [
-    eventBus.on(EventTypes.EMERGENCY_ALERT_CREATED, () => {
+    eventBus.on(EventTypes.EMERGENCY_ALERT_CREATED, (event) => {
+      alertManager.ensureAudioUnlocked();
+      if (event?.payload?.severity === 'CRITICAL' || event?.payload?.priority === 'P1') {
+        alertManager.playEmergencyChime('P1');
+      }
       updateAlarmBadgeAndBanner();
       if (['emergency', 'command'].includes(subRoute)) renderCurrentSubRoute();
     }),
-    eventBus.on(EventTypes.EMERGENCY_PREARRIVAL_CREATED, () => {
+    eventBus.on(EventTypes.EMERGENCY_PREARRIVAL_CREATED, (event) => {
+      alertManager.ensureAudioUnlocked();
+      alertManager.playEmergencyChime(event?.payload?.severity === 'Critical' ? 'P1' : 'P2');
+      setTimeout(() => {
+        alertManager.speakAlert(`Emergency pre-arrival alert. ${event?.payload?.patientName || 'Emergency patient'} incoming.`);
+      }, 350);
       updateAlarmBadgeAndBanner();
       if (['emergency', 'command'].includes(subRoute)) renderCurrentSubRoute();
     }),
-    eventBus.on(EventTypes.EMERGENCY_CASE_CREATED, () => {
+    eventBus.on(EventTypes.EMERGENCY_CASE_CREATED, (event) => {
+      alertManager.ensureAudioUnlocked();
+      alertManager.playEmergencyChime('P1');
+      setTimeout(() => {
+        alertManager.speakAlert(`Critical emergency case detected. ${event?.payload?.patientName || 'Patient'} requires immediate attention.`);
+      }, 350);
       updateAlarmBadgeAndBanner();
       if (['emergency', 'command'].includes(subRoute)) renderCurrentSubRoute();
     }),
-    eventBus.on(EventTypes.AMBULANCE_REQUEST_CREATED, () => {
+    eventBus.on(EventTypes.AMBULANCE_REQUEST_CREATED, (event) => {
+      alertManager.ensureAudioUnlocked();
+      alertManager.playAmbulanceChime();
+      setTimeout(() => {
+        alertManager.speakAlert('Emergency ambulance request received. Immediate attention required.');
+      }, 350);
       updateAlarmBadgeAndBanner();
       if (['emergency', 'command'].includes(subRoute)) renderCurrentSubRoute();
     }),
