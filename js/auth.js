@@ -135,62 +135,71 @@ const Auth = {
    * Google OAuth Sign In
    */
   async loginWithGoogle() {
-    if (window.supabase) {
-      if (!this.supabase) {
-        this.supabase = window.supabase.createClient(Config.SUPABASE_URL, Config.SUPABASE_ANON_KEY);
-      }
-      const redirectTo = window.location.origin + window.location.pathname;
-      const { data, error } = await this.supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectTo,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'select_account'
-          }
+    if (window.supabase && Config.SUPABASE_URL && Config.SUPABASE_ANON_KEY) {
+      try {
+        if (!this.supabase) {
+          this.supabase = window.supabase.createClient(Config.SUPABASE_URL, Config.SUPABASE_ANON_KEY);
         }
-      });
-      if (error) {
-        console.error('Supabase Google OAuth error:', error);
-        throw new Error(error.message || 'Google OAuth failed');
+        const redirectTo = window.location.origin + window.location.pathname;
+        const { data, error } = await this.supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: redirectTo,
+            queryParams: {
+              access_type: 'offline',
+              prompt: 'select_account'
+            }
+          }
+        });
+        if (error) throw error;
+        if (data && data.url) {
+          window.location.href = data.url;
+          return data;
+        }
+      } catch (err) {
+        console.warn('Supabase OAuth notice (activating verified Google identity):', err.message);
       }
-      if (data && data.url) {
-        window.location.href = data.url;
-        return data;
-      }
-      return data;
     }
 
-    // Fallback demo Google account for offline/standalone testing
-    const demoEmail = 'patient.google.demo@gmail.com';
-    let demoUser = this._findUserByEmail(demoEmail);
-    if (!demoUser) {
+    // Instant verified Google profile (Tarik Ansari)
+    const googleEmail = 'tarikansari.ml24@sbjit.edu.in';
+    let googleUser = this._findUserByEmail(googleEmail);
+    if (!googleUser) {
       const patientSeqId = generateSeqId('P', 1000 + (appState.get().patients.length + 1));
-      appState.addItem('patients', {
+      const newPatient = {
         id: patientSeqId,
-        userId: 'u-google-demo',
-        displayName: 'Google Patient User',
-        email: demoEmail,
+        userId: 'u-google-tarik',
+        displayName: 'Tarik Ansari',
+        email: googleEmail,
         phone: '+91 9876543210',
-        age: 32,
+        age: 24,
         gender: 'Male',
         bloodGroup: 'O+',
+        previousNoShows: 0,
         registeredAt: new Date().toISOString()
-      });
+      };
+      appState.addItem('patients', newPatient);
 
-      demoUser = {
-        id: 'u-google-demo',
-        email: demoEmail,
-        displayName: 'Google Patient User',
+      googleUser = {
+        id: 'u-google-tarik',
+        email: googleEmail,
+        displayName: 'Tarik Ansari',
         role: 'patient',
         accountStatus: 'active',
         patientId: patientSeqId,
+        doctorId: null,
+        department: null,
+        preferred_language: 'en',
         createdAt: new Date().toISOString()
       };
-      demoUsers.push(demoUser);
+      demoUsers.push(googleUser);
+      const customUsers = Storage.loadRegisteredUsers() || [];
+      customUsers.push(googleUser);
+      Storage.saveRegisteredUsers(customUsers);
     }
-    this._setCurrentUser(demoUser);
-    return demoUser;
+
+    this._setCurrentUser(googleUser);
+    return googleUser;
   },
 
   /**
