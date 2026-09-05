@@ -381,18 +381,40 @@ class SupabaseSyncEngine {
   }
 
   /**
+   * Direct REST upsert bridge
+   */
+  async restUpsert(table, data) {
+    if (!Config.SUPABASE_URL || !Config.SUPABASE_ANON_KEY) return null;
+    try {
+      const url = `${Config.SUPABASE_URL}/rest/v1/${table}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'apikey': Config.SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${Config.SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates,return=representation'
+        },
+        body: JSON.stringify(data)
+      });
+      return await response.json().catch(() => null);
+    } catch (err) {
+      console.warn(`[SupabaseSync REST] ${table} notice:`, err);
+      return null;
+    }
+  }
+
+  /**
    * Smooth database sync across Supabase tables
    */
   async _persistToDatabase(type, payload = {}, event = {}) {
-    if (!this.supabase) return;
-
     try {
       // 1. User Logins & Registrations -> public.users
       if (type === EventTypes.USER_LOGGED_IN || type === EventTypes.USER_REGISTERED) {
         const user = payload.user || payload;
         if (user && user.email) {
           const cleanEmail = user.email.toLowerCase().trim();
-          await this.supabase.from('users').upsert({
+          await this.restUpsert('users', {
             id: user.id || generateId('u'),
             email: cleanEmail,
             display_name: user.displayName || user.name || cleanEmail.split('@')[0],
@@ -400,8 +422,6 @@ class SupabaseSyncEngine {
             department: user.department || null,
             phone: user.phone || '+91 9800000000',
             account_status: 'active'
-          }, { onConflict: 'email' }).catch(err => {
-            console.warn('[SupabaseSync] users table upsert notice:', err?.message);
           });
         }
       }
@@ -409,7 +429,7 @@ class SupabaseSyncEngine {
       // 2. Appointments -> public.appointments
       if (type === EventTypes.APPOINTMENT_BOOKED || payload.appointmentId) {
         const aptId = payload.id || payload.appointmentId || generateId('APT');
-        await this.supabase.from('appointments').upsert({
+        await this.restUpsert('appointments', {
           id: aptId,
           patient_id: payload.patientId || 'P-1001',
           doctor_id: payload.doctorId || 'D0001',
@@ -419,14 +439,12 @@ class SupabaseSyncEngine {
           symptom_detected_language: payload.detectedLanguage || 'en',
           normalized_symptoms: payload.normalizedSymptoms || [],
           status: payload.status || 'Scheduled'
-        }, { onConflict: 'id' }).catch(err => {
-          console.warn('[SupabaseSync] appointments table upsert notice:', err?.message);
         });
       }
 
       // 3. Care Plans -> public.discharge_plans
       if (type === EventTypes.CARE_PLAN_CREATED || payload.planId) {
-        await this.supabase.from('discharge_plans').upsert({
+        await this.restUpsert('discharge_plans', {
           id: payload.planId || payload.id || generateId('DP'),
           patient_id: payload.patientId || 'P-1001',
           approved_by: payload.doctorId || payload.approvedBy || 'D0001',
@@ -435,8 +453,6 @@ class SupabaseSyncEngine {
           instructions: payload.instructions || payload.dietPlan || '',
           language: payload.language || 'English',
           active: true
-        }, { onConflict: 'id' }).catch(err => {
-          console.warn('[SupabaseSync] discharge_plans table upsert notice:', err?.message);
         });
       }
     } catch (e) {
@@ -448,9 +464,8 @@ class SupabaseSyncEngine {
    * Save audit event to Supabase table public.audit_events (if table exists and connected)
    */
   async _persistAuditEvent(msg) {
-    if (!this.supabase) return;
     try {
-      await this.supabase.from('audit_events').insert({
+      await this.restUpsert('audit_events', {
         id: msg.eventId,
         event_type: msg.type,
         timestamp: msg.timestamp,
@@ -458,7 +473,7 @@ class SupabaseSyncEngine {
         source: msg.senderRole,
         user_id: msg.senderUserId,
         entity_id: msg.payload?.caseId || msg.payload?.patientId || msg.payload?.id || null
-      }).catch(() => {});
+      });
     } catch {
       // Non-blocking catch for standalone mode
     }
